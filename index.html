@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Reader</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    .toolbar {
+      padding: 12px 16px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .toolbar h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .btn {
+      padding: 8px 16px;
+      background: var(--accent);
+      color: var(--btn-text);
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn:active { transform: scale(0.98); }
+    .open-wrap {
+      position: relative;
+    }
+    .open-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      min-width: 100%;
+      background: var(--toolbar-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 20;
+      overflow: hidden;
+    }
+    .open-menu.visible { display: block; }
+    .open-menu button {
+      display: block;
+      width: 100%;
+      padding: 10px 16px;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+    }
+    .open-menu button:hover { background: var(--code-bg); }
+    .theme-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .theme-picker {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .filename {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-left: auto;
+      max-width: 30%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .main-wrap {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .sidebar {
+      width: 260px;
+      min-width: 0;
+      background: var(--toolbar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      transition: width 0.2s ease, min-width 0.2s ease;
+    }
+    .sidebar.collapsed {
+      width: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .sidebar-header span { font-size: 0.9rem; font-weight: 600; color: var(--muted); }
+    .sidebar-toggle {
+      margin-left: auto;
+      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    .sidebar-toggle:hover { color: var(--text); }
+    .tree-wrap {
+      flex: 1;
+      overflow: auto;
+      padding: 6px 0;
+    }
+    .tree { list-style: none; margin: 0; padding: 0; }
+    .tree ul { list-style: none; margin: 0; padding-left: 1.25em; border-left: 1px solid var(--border); margin-left: 8px; }
+    .tree-item {
+      display: block;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .tree-item-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-item:hover .tree-item-row { background: var(--code-bg); }
+    .tree-item.selected .tree-item-row { background: var(--code-bg); color: var(--accent); }
+    .tree-item .expand {
+      width: 16px;
+      flex-shrink: 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.7em;
+    }
+    .tree-item .expand.empty { visibility: hidden; }
+    .tree-item.folder .expand::before { content: '▶'; }
+    .tree-item.folder.expanded .expand::before { content: '▼'; }
+    .tree-item.folder:not(.expanded) > ul { display: none; }
+    .tree-item .icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tree-item .icon svg { width: 100%; height: 100%; }
+    .tree-item.folder .icon { color: var(--accent); }
+    .tree-item.file .icon { color: var(--muted); }
+    .tree-item .name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .show-sidebar-btn {
+      display: none;
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      padding: 8px 6px;
+      background: var(--toolbar-bg);
+      border: 1px solid var(--border);
+      border-radius: 0 6px 6px 0;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .sidebar.collapsed ~ .show-sidebar-btn { display: block; }
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .content {
+      flex: 1;
+      overflow: auto;
+      padding: 24px 32px 48px;
+    }
+    .content.empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 1rem;
+      text-align: center;
+      padding: 2rem;
+    }
+    .rendered {
+      max-width: 720px;
+      margin: 0 auto;
+      line-height: 1.65;
+    }
+    .rendered h1 { font-size: 1.85rem; margin: 1.5em 0 0.5em; color: var(--h1); font-weight: 700; }
+    .rendered h1:first-child { margin-top: 0; }
+    .rendered h2 { font-size: 1.5rem; margin: 1.35em 0 0.45em; color: var(--h2); font-weight: 600; }
+    .rendered h3 { font-size: 1.25rem; margin: 1.2em 0 0.4em; color: var(--h3); font-weight: 600; }
+    .rendered h4, .rendered h5, .rendered h6 { font-size: 1.1rem; margin: 1em 0 0.35em; color: var(--h4); font-weight: 600; }
+    .rendered p { margin: 0.85em 0; color: var(--text); }
+    .rendered ul, .rendered ol { margin: 0.85em 0; padding-left: 1.5em; }
+    .rendered li { margin: 0.35em 0; }
+    .rendered blockquote {
+      margin: 1em 0;
+      padding: 0.5em 1em;
+      border-left: 4px solid var(--accent);
+      background: var(--blockquote-bg);
+      color: var(--muted);
+      border-radius: 0 8px 8px 0;
+    }
+    .rendered code {
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.9em;
+      background: var(--code-bg);
+      padding: 0.2em 0.4em;
+      border-radius: 4px;
+      color: var(--code);
+    }
+    .rendered pre {
+      margin: 1em 0;
+      padding: 1em;
+      background: var(--code-bg);
+      border-radius: 8px;
+      overflow: auto;
+    }
+    .rendered pre code { background: none; padding: 0; color: var(--text); }
+    .rendered hr { border: none; height: 1px; background: var(--border); margin: 1.5em 0; }
+    .rendered a { color: var(--link); text-decoration: none; }
+    .rendered a:hover { text-decoration: underline; }
+    .rendered strong, .rendered b {
+      font-weight: 700;
+      color: var(--bold-fallback, var(--accent));
+    }
+    @supports (background-clip: text) or (-webkit-background-clip: text) {
+      .rendered strong, .rendered b {
+        background: var(--bold-gradient);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+    }
+    .rendered table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    .rendered th, .rendered td { border: 1px solid var(--border); padding: 0.5em 0.75em; text-align: left; }
+    .rendered th { background: var(--code-bg); color: var(--accent); font-weight: 600; }
+    .error {
+      color: var(--error);
+      padding: 1em;
+      background: var(--error-bg);
+      border-radius: 8px;
+      margin: 1em 0;
+    }
+
+    /* Theme: Mocha (default dark) */
+    body[data-theme="mocha"],
+    body:not([data-theme]) {
+      --bg: #1e1e2e;
+      --toolbar-bg: #181825;
+      --border: #313244;
+      --text: #cdd6f4;
+      --muted: #a6adc8;
+      --accent: #cba6f7;
+      --btn-text: #1e1e2e;
+      --h1: #cba6f7;
+      --h2: #89b4fa;
+      --h3: #a6e3a1;
+      --h4: #f9e2af;
+      --link: #89b4fa;
+      --code: #f5c2e7;
+      --code-bg: #313244;
+      --blockquote-bg: #313244;
+      --error: #f38ba8;
+      --error-bg: rgba(243, 139, 168, 0.15);
+      --bold-fallback: #cba6f7;
+      --bold-gradient: linear-gradient(105deg, #f5c2e7, #cba6f7, #89b4fa);
+    }
+
+    /* Theme: Paper (warm light) */
+    body[data-theme="paper"] {
+      --bg: #f5f0e8;
+      --toolbar-bg: #ebe5dc;
+      --border: #d4cdc3;
+      --text: #2c2825;
+      --muted: #5c5650;
+      --accent: #8b6914;
+      --btn-text: #f5f0e8;
+      --h1: #6b5344;
+      --h2: #5a4a3d;
+      --h3: #4a3d32;
+      --h4: #3d332a;
+      --link: #2e6b8a;
+      --code: #a04040;
+      --code-bg: #e8e2d9;
+      --blockquote-bg: #e8e2d9;
+      --error: #b03030;
+      --error-bg: rgba(176, 48, 48, 0.1);
+      --bold-fallback: #8b6914;
+      --bold-gradient: linear-gradient(105deg, #6b5344, #8b6914, #2e6b8a);
+    }
+
+    /* Theme: Sepia */
+    body[data-theme="sepia"] {
+      --bg: #f4ecd8;
+      --toolbar-bg: #e8dfc5;
+      --border: #d4c4a0;
+      --text: #3d3a35;
+      --muted: #6b6559;
+      --accent: #7d4e2d;
+      --btn-text: #f4ecd8;
+      --h1: #5c4033;
+      --h2: #4a3529;
+      --h3: #3d2c22;
+      --h4: #33261e;
+      --link: #2d5a6b;
+      --code: #8b4513;
+      --code-bg: #e5dcc8;
+      --blockquote-bg: #e5dcc8;
+      --error: #a03020;
+      --error-bg: rgba(160, 48, 32, 0.12);
+      --bold-fallback: #7d4e2d;
+      --bold-gradient: linear-gradient(105deg, #5c4033, #7d4e2d, #2d5a6b);
+    }
+
+    /* Theme: Nord (cool dark) */
+    body[data-theme="nord"] {
+      --bg: #2e3440;
+      --toolbar-bg: #3b4252;
+      --border: #4c566a;
+      --text: #d8dee9;
+      --muted: #9ca8b8;
+      --accent: #88c0d0;
+      --btn-text: #2e3440;
+      --h1: #8fbcbb;
+      --h2: #88c0d0;
+      --h3: #81a1c1;
+      --h4: #5e81ac;
+      --link: #88c0d0;
+      --code: #bf616a;
+      --code-bg: #3b4252;
+      --blockquote-bg: #3b4252;
+      --error: #bf616a;
+      --error-bg: rgba(191, 97, 106, 0.15);
+      --bold-fallback: #88c0d0;
+      --bold-gradient: linear-gradient(105deg, #8fbcbb, #88c0d0, #81a1c1);
+    }
+
+    /* Theme: Solarized Light */
+    body[data-theme="solarized-light"] {
+      --bg: #fdf6e3;
+      --toolbar-bg: #eee8d5;
+      --border: #ddd6c4;
+      --text: #586e75;
+      --muted: #839496;
+      --accent: #268bd2;
+      --btn-text: #fdf6e3;
+      --h1: #268bd2;
+      --h2: #2aa198;
+      --h3: #859900;
+      --h4: #b58900;
+      --link: #268bd2;
+      --code: #d33682;
+      --code-bg: #eee8d5;
+      --blockquote-bg: #eee8d5;
+      --error: #dc322f;
+      --error-bg: rgba(220, 50, 47, 0.1);
+      --bold-fallback: #268bd2;
+      --bold-gradient: linear-gradient(105deg, #268bd2, #2aa198, #859900);
+    }
+
+    /* Theme: High contrast (accessibility) */
+    body[data-theme="high-contrast"] {
+      --bg: #0c0c0c;
+      --toolbar-bg: #1a1a1a;
+      --border: #404040;
+      --text: #e0e0e0;
+      --muted: #a0a0a0;
+      --accent: #00d4ff;
+      --btn-text: #0c0c0c;
+      --h1: #00d4ff;
+      --h2: #7ec8ff;
+      --h3: #b8e6ff;
+      --h4: #e0e0e0;
+      --link: #7ec8ff;
+      --code: #ffb86c;
+      --code-bg: #2a2a2a;
+      --blockquote-bg: #2a2a2a;
+      --error: #ff6b6b;
+      --error-bg: rgba(255, 107, 107, 0.2);
+      --bold-fallback: #00d4ff;
+      --bold-gradient: linear-gradient(105deg, #00d4ff, #7ec8ff, #ffb86c);
+    }
+
+    /* Theme: Dracula */
+    body[data-theme="dracula"] {
+      --bg: #282a36;
+      --toolbar-bg: #21222c;
+      --border: #44475a;
+      --text: #f8f8f2;
+      --muted: #6272a4;
+      --accent: #bd93f9;
+      --btn-text: #282a36;
+      --h1: #ff79c6;
+      --h2: #bd93f9;
+      --h3: #8be9fd;
+      --h4: #50fa7b;
+      --link: #8be9fd;
+      --code: #ff79c6;
+      --code-bg: #44475a;
+      --blockquote-bg: #44475a;
+      --error: #ff5555;
+      --error-bg: rgba(255, 85, 85, 0.15);
+      --bold-fallback: #bd93f9;
+      --bold-gradient: linear-gradient(105deg, #ff79c6, #bd93f9, #8be9fd);
+    }
+
+    /* Theme: Rose Pine */
+    body[data-theme="rose-pine"] {
+      --bg: #191724;
+      --toolbar-bg: #1f1d2e;
+      --border: #2d2a3e;
+      --text: #e0def4;
+      --muted: #6e6a86;
+      --accent: #c4a7e7;
+      --btn-text: #191724;
+      --h1: #ebbcba;
+      --h2: #c4a7e7;
+      --h3: #9ccfd8;
+      --h4: #f6c177;
+      --link: #9ccfd8;
+      --code: #eb6f92;
+      --code-bg: #2d2a3e;
+      --blockquote-bg: #2d2a3e;
+      --error: #eb6f92;
+      --error-bg: rgba(235, 111, 146, 0.15);
+      --bold-fallback: #c4a7e7;
+      --bold-gradient: linear-gradient(105deg, #ebbcba, #c4a7e7, #9ccfd8);
+    }
+
+    /* Theme: Gruvbox Dark */
+    body[data-theme="gruvbox"] {
+      --bg: #282828;
+      --toolbar-bg: #1d2021;
+      --border: #504945;
+      --text: #ebdbb2;
+      --muted: #a89984;
+      --accent: #d3869b;
+      --btn-text: #282828;
+      --h1: #fb4934;
+      --h2: #fe8019;
+      --h3: #fabd2f;
+      --h4: #b8bb26;
+      --link: #83a598;
+      --code: #d3869b;
+      --code-bg: #504945;
+      --blockquote-bg: #504945;
+      --error: #fb4934;
+      --error-bg: rgba(251, 73, 52, 0.15);
+      --bold-fallback: #fe8019;
+      --bold-gradient: linear-gradient(105deg, #fe8019, #fabd2f, #b8bb26);
+    }
+
+    /* Theme: Lavender (soft purple light) */
+    body[data-theme="lavender"] {
+      --bg: #e8e4f0;
+      --toolbar-bg: #ddd8e8;
+      --border: #c4bcd4;
+      --text: #2d2a38;
+      --muted: #5c5868;
+      --accent: #7c5cbf;
+      --btn-text: #e8e4f0;
+      --h1: #5e4d7a;
+      --h2: #6b5b8a;
+      --h3: #7c5cbf;
+      --h4: #8b7aa8;
+      --link: #5b7c99;
+      --code: #a04080;
+      --code-bg: #ddd8e8;
+      --blockquote-bg: #ddd8e8;
+      --error: #c04040;
+      --error-bg: rgba(192, 64, 64, 0.1);
+      --bold-fallback: #7c5cbf;
+      --bold-gradient: linear-gradient(105deg, #5e4d7a, #7c5cbf, #5b7c99);
+    }
+
+    /* Theme: Forest (green-tinted dark) */
+    body[data-theme="forest"] {
+      --bg: #1a2421;
+      --toolbar-bg: #232e2a;
+      --border: #2d3d38;
+      --text: #d4e4dc;
+      --muted: #7a9b8e;
+      --accent: #7cb083;
+      --btn-text: #1a2421;
+      --h1: #9dd4a8;
+      --h2: #7cb083;
+      --h3: #5d9b6a;
+      --h4: #b8d4a8;
+      --link: #7cb083;
+      --code: #c8e6c9;
+      --code-bg: #2d3d38;
+      --blockquote-bg: #2d3d38;
+      --error: #e07d6a;
+      --error-bg: rgba(224, 125, 106, 0.15);
+      --bold-fallback: #7cb083;
+      --bold-gradient: linear-gradient(105deg, #9dd4a8, #7cb083, #5d9b6a);
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>Markdown Reader</h1>
+    <div class="open-wrap">
+      <button class="btn" id="openBtn" type="button">Open file or folder ▾</button>
+      <div class="open-menu" id="openMenu">
+        <button type="button" data-action="file">Open file</button>
+        <button type="button" data-action="folder">Open folder</button>
+      </div>
+    </div>
+    <label class="theme-label">
+      Theme
+      <select class="theme-picker" id="themePicker" title="Choose reading theme">
+        <option value="mocha">Mocha</option>
+        <option value="paper">Paper</option>
+        <option value="sepia">Sepia</option>
+        <option value="nord">Nord</option>
+        <option value="solarized-light">Solarized Light</option>
+        <option value="high-contrast">High contrast</option>
+        <option value="dracula">Dracula</option>
+        <option value="rose-pine">Rose Pine</option>
+        <option value="gruvbox">Gruvbox</option>
+        <option value="lavender">Lavender</option>
+        <option value="forest">Forest</option>
+      </select>
+    </label>
+    <span class="filename" id="filename"></span>
+  </div>
+  <div class="main-wrap">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span>Files</span>
+        <button type="button" class="sidebar-toggle" id="sidebarToggle" title="Collapse file tree">◀</button>
+      </div>
+      <div class="tree-wrap">
+        <ul class="tree" id="tree"></ul>
+      </div>
+    </aside>
+    <button type="button" class="show-sidebar-btn" id="showSidebarBtn" title="Show file tree">▶ Files</button>
+    <div class="content-area">
+      <div class="content empty" id="content">
+        Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const contentEl = document.getElementById('content');
+    const filenameEl = document.getElementById('filename');
+    const treeEl = document.getElementById('tree');
+    const sidebar = document.getElementById('sidebar');
+    const openBtn = document.getElementById('openBtn');
+    const openMenu = document.getElementById('openMenu');
+
+    function getApi() {
+      return window.pywebview && window.pywebview.api;
+    }
+
+    let treeRoot = null;
+    let selectedPath = null;
+    const loadedChildren = new Map();
+
+    var folderIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
+    var fileIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>';
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function render(data) {
+      if (!data) return;
+      if (data.error) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered"><div class="error">Error: ' + escapeHtml(data.error) + '</div></div>';
+        filenameEl.textContent = data.path || '';
+        return;
+      }
+      if (data.content == null) return;
+      filenameEl.textContent = data.path || '';
+      contentEl.className = 'content';
+      contentEl.innerHTML = '<div class="rendered">' + marked.parse(data.content) + '</div>';
+    }
+
+    function setTreeRoot(rootPath, initialFilePath) {
+      treeRoot = rootPath;
+      loadedChildren.clear();
+      treeEl.innerHTML = '';
+      if (!rootPath) return;
+      const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() || rootPath;
+      const rootLi = document.createElement('li');
+      rootLi.className = 'tree-item folder';
+      rootLi.dataset.path = rootPath;
+      rootLi.innerHTML = '<div class="tree-item-row"><span class="expand">▶</span><span class="icon">' + folderIcon + '</span><span class="name">' + escapeHtml(rootName) + '</span></div>';
+      rootLi.classList.add('expanded');
+      treeEl.appendChild(rootLi);
+      rootLi.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleFolder(rootLi);
+      });
+      loadChildren(rootPath, rootLi);
+      if (initialFilePath) {
+        selectFile(initialFilePath);
+        var a = getApi();
+        if (a) a.read_file(initialFilePath).then(function (r) { render(r); }).catch(showError);
+      }
+    }
+
+    function loadChildren(dirPath, parentLi) {
+      if (loadedChildren.has(dirPath)) return;
+      loadedChildren.set(dirPath, []);
+      var a = getApi();
+      if (!a) return;
+      a.list_dir(dirPath).then(function (res) {
+        const entries = res.entries || [];
+        loadedChildren.set(dirPath, entries);
+        renderTreeChildren(parentLi, entries);
+      }).catch(function () {});
+    }
+
+    function renderTreeChildren(parentLi, entries) {
+      let ul = parentLi.querySelector('ul');
+      if (!ul) {
+        ul = document.createElement('ul');
+        parentLi.appendChild(ul);
+      }
+      ul.innerHTML = '';
+      entries.forEach(function (entry) {
+        const li = document.createElement('li');
+        li.className = 'tree-item ' + (entry.isDir ? 'folder' : 'file');
+        li.dataset.path = entry.path;
+        li.dataset.isDir = entry.isDir ? '1' : '0';
+        const expandCls = entry.isDir ? 'expand' : 'expand empty';
+        const icon = entry.isDir ? folderIcon : fileIcon;
+        li.innerHTML = '<div class="tree-item-row"><span class="' + expandCls + '">' + (entry.isDir ? '▶' : '') + '</span><span class="icon">' + icon + '</span><span class="name">' + escapeHtml(entry.name) + '</span></div>';
+        ul.appendChild(li);
+        li.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (entry.isDir) toggleFolder(li);
+          else openFile(entry.path);
+        });
+      });
+    }
+
+    function toggleFolder(li) {
+      const path = li.dataset.path;
+      const isDir = li.dataset.isDir === '1';
+      if (!path || !isDir) return;
+      const expanded = li.classList.toggle('expanded');
+      if (expanded) {
+        const entries = loadedChildren.get(path);
+        if (entries !== undefined) renderTreeChildren(li, entries);
+        else loadChildren(path, li);
+      }
+    }
+
+    function openFile(path) {
+      document.querySelectorAll('.tree-item.selected').forEach(function (el) { el.classList.remove('selected'); });
+      document.querySelectorAll('.tree-item').forEach(function (el) {
+        if (el.dataset.path === path) el.classList.add('selected');
+      });
+      selectedPath = path;
+      var a = getApi();
+      if (a) a.read_file(path).then(render).catch(showError);
+    }
+
+    function showError(err) {
+      contentEl.className = 'content';
+      contentEl.innerHTML = '<div class="rendered"><div class="error">' + escapeHtml(String(err && (err.message || err))) + '</div></div>';
+    }
+
+    function selectFile(path) {
+      document.querySelectorAll('.tree-item').forEach(function (el) {
+        if (el.dataset.path === path) el.classList.add('selected');
+      });
+      selectedPath = path;
+    }
+
+    function onOpenFile() {
+      openMenu.classList.remove('visible');
+      var a = getApi();
+      if (!a) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered"><div class="error">API not available. Run this app from Markdown Reader.</div></div>';
+        return;
+      }
+      a.open_file().then(function (data) {
+        if (!data) return;
+        if (data.error) {
+          render({ path: data.path, content: null, error: data.error });
+          return;
+        }
+        setTreeRoot(data.root, data.path);
+      }).catch(showError);
+    }
+
+    function onOpenFolder() {
+      openMenu.classList.remove('visible');
+      var a = getApi();
+      if (!a) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered"><div class="error">API not available. Run this app from Markdown Reader.</div></div>';
+        return;
+      }
+      a.open_folder().then(function (data) {
+        if (!data) return;
+        if (data.error) {
+          contentEl.className = 'content';
+          contentEl.innerHTML = '<div class="rendered"><div class="error">' + escapeHtml(data.error) + '</div></div>';
+          return;
+        }
+        setTreeRoot(data.root, null);
+        contentEl.className = 'content empty';
+        contentEl.innerHTML = 'Select a file from the tree to view it.';
+      }).catch(showError);
+    }
+
+    openBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openMenu.classList.toggle('visible');
+    });
+    openMenu.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (this.dataset.action === 'file') onOpenFile();
+        else onOpenFolder();
+      });
+    });
+    document.addEventListener('click', function () {
+      openMenu.classList.remove('visible');
+    });
+
+    sidebar.querySelector('.sidebar-toggle').addEventListener('click', function () {
+      sidebar.classList.toggle('collapsed');
+      this.textContent = sidebar.classList.contains('collapsed') ? '▶' : '◀';
+      this.title = sidebar.classList.contains('collapsed') ? 'Show file tree' : 'Collapse file tree';
+    });
+    document.getElementById('showSidebarBtn').addEventListener('click', function () {
+      sidebar.classList.remove('collapsed');
+      sidebar.querySelector('.sidebar-toggle').textContent = '◀';
+      sidebar.querySelector('.sidebar-toggle').title = 'Collapse file tree';
+    });
+
+    const themePicker = document.getElementById('themePicker');
+    const THEME_KEY = 'markdown-reader-theme';
+
+    function applyTheme(themeId) {
+      document.body.setAttribute('data-theme', themeId);
+      themePicker.value = themeId;
+      try { localStorage.setItem(THEME_KEY, themeId); } catch (e) {}
+    }
+
+    themePicker.addEventListener('change', function () {
+      applyTheme(this.value);
+    });
+
+    (function initTheme() {
+      try {
+        const saved = localStorage.getItem(THEME_KEY);
+        if (saved && themePicker.querySelector('option[value="' + saved + '"]')) {
+          applyTheme(saved);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>
