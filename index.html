@@ -100,6 +100,51 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .tab-bar {
+      display: flex;
+      align-items: center;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 4px;
+      gap: 2px;
+      min-height: 0;
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+    .tab-bar.hidden { display: none; }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      white-space: nowrap;
+      max-width: 180px;
+      min-width: 0;
+      flex-shrink: 0;
+    }
+    .tab:hover { color: var(--text); background: var(--code-bg); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab .tab-title { overflow: hidden; text-overflow: ellipsis; }
+    .tab .tab-close {
+      padding: 2px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 1rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .tab .tab-close:hover { color: var(--text); background: var(--border); }
+    .tab.dragging { opacity: 0.5; }
+    .tab.drop-target { border-bottom-color: var(--accent); }
     .main-wrap {
       flex: 1;
       display: flex;
@@ -230,6 +275,71 @@
       margin: 0 auto;
       line-height: 1.65;
     }
+    .md-block {
+      position: relative;
+      cursor: text;
+      border-radius: 4px;
+      margin: 0 -4px;
+      padding: 2px 4px;
+    }
+    .md-block:hover {
+      background: var(--code-bg);
+    }
+    .md-block-empty {
+      min-height: 1.5em;
+    }
+    .md-block.editing {
+      padding: 0;
+      margin: 0;
+      background: transparent;
+    }
+    .md-block.editing .md-block-placeholder {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .md-block.editing .inline-edit {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: auto;
+    }
+    .md-block-code.editing .inline-edit {
+      position: static;
+      overflow: visible;
+      min-height: 3em;
+    }
+    .md-block .inline-edit {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      min-height: 1em;
+      padding: 0;
+      margin: 0;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-size: inherit;
+      line-height: inherit;
+      outline: none;
+      box-sizing: border-box;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .md-block .inline-edit:focus {
+      outline: none;
+    }
+    .md-block-heading-1 .inline-edit { font-size: 1.85rem; font-weight: 700; color: var(--h1); }
+    .md-block-heading-2 .inline-edit { font-size: 1.5rem; font-weight: 600; color: var(--h2); }
+    .md-block-heading-3 .inline-edit { font-size: 1.25rem; font-weight: 600; color: var(--h3); }
+    .md-block-heading-4 .inline-edit,
+    .md-block-heading-5 .inline-edit,
+    .md-block-heading-6 .inline-edit { font-size: 1.1rem; font-weight: 600; color: var(--h4); }
+    .md-block-paragraph .inline-edit { color: var(--text); }
+    .md-block-code .inline-edit { font-family: "Cascadia Code", "Consolas", monospace; font-size: 0.9em; color: var(--code); white-space: pre; }
+    .md-block-blockquote .inline-edit { color: var(--muted); }
     .rendered h1 { font-size: 1.85rem; margin: 1.5em 0 0.5em; color: var(--h1); font-weight: 700; }
     .rendered h1:first-child { margin-top: 0; }
     .rendered h2 { font-size: 1.5rem; margin: 1.35em 0 0.45em; color: var(--h2); font-weight: 600; }
@@ -288,9 +398,32 @@
       margin: 1em 0;
     }
 
-    /* Theme: Mocha (default dark) */
-    body[data-theme="mocha"],
+    /* Theme: Obsidianite (default – dark, neon-inspired, from Obsidian) */
+    body[data-theme="obsidianite"],
     body:not([data-theme]) {
+      --bg: #100e17;
+      --toolbar-bg: #0d0b12;
+      --border: #101014;
+      --text: #bebebe;
+      --muted: #5e6565;
+      --accent: #0fb6d6;
+      --btn-text: #100e17;
+      --h1: #0fb6d6;
+      --h2: #6bcafb;
+      --h3: #45e0a2;
+      --h4: #ffc93c;
+      --link: #6bcafb;
+      --code: #0fb6d6;
+      --code-bg: #0d0b12;
+      --blockquote-bg: #101014;
+      --error: #f95959;
+      --error-bg: rgba(249, 89, 89, 0.15);
+      --bold-fallback: #dcb9fc;
+      --bold-gradient: linear-gradient(105deg, #f4569d, #0fb6d6, #45e0a2);
+    }
+
+    /* Theme: Mocha (Catppuccin dark) */
+    body[data-theme="mocha"] {
       --bg: #1e1e2e;
       --toolbar-bg: #181825;
       --border: #313244;
@@ -556,6 +689,7 @@
     <label class="theme-label">
       Theme
       <select class="theme-picker" id="themePicker" title="Choose reading theme">
+        <option value="obsidianite">Obsidianite</option>
         <option value="mocha">Mocha</option>
         <option value="paper">Paper</option>
         <option value="sepia">Sepia</option>
@@ -571,6 +705,9 @@
     </label>
     <span class="filename" id="filename"></span>
   </div>
+  <div class="tab-bar hidden" id="tabBar">
+    <!-- tabs appended by JS -->
+  </div>
   <div class="main-wrap">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
@@ -584,7 +721,7 @@
     <button type="button" class="show-sidebar-btn" id="showSidebarBtn" title="Show file tree">▶ Files</button>
     <div class="content-area">
       <div class="content empty" id="content">
-        Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.
+        Loading…
       </div>
     </div>
   </div>
@@ -593,6 +730,24 @@
     const contentEl = document.getElementById('content');
     const filenameEl = document.getElementById('filename');
     const treeEl = document.getElementById('tree');
+    var welcomeContent = null;
+    window.__applyWelcome = function (dataStr) {
+      try {
+        var data = JSON.parse(dataStr);
+        if (data && data.content != null) {
+          welcomeContent = data.content;
+          contentEl.className = 'content';
+          contentEl.innerHTML = '<div class="rendered">' + marked.parse(data.content) + '</div>';
+          filenameEl.textContent = 'Welcome';
+        }
+      } catch (e) {}
+    };
+    setTimeout(function () {
+      if (contentEl.classList.contains('empty') && contentEl.textContent.indexOf('Loading') !== -1) {
+        contentEl.className = 'content empty';
+        contentEl.innerHTML = 'Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.';
+      }
+    }, 4000);
     const sidebar = document.getElementById('sidebar');
     const openBtn = document.getElementById('openBtn');
     const openMenu = document.getElementById('openMenu');
@@ -604,6 +759,11 @@
     let treeRoot = null;
     let selectedPath = null;
     const loadedChildren = new Map();
+    const tabBarEl = document.getElementById('tabBar');
+    let tabs = [];
+    let activeTabId = null;
+    var currentBlocks = [];
+    var currentTabRef = null;
 
     var folderIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
     var fileIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>';
@@ -612,6 +772,324 @@
       const div = document.createElement('div');
       div.textContent = s;
       return div.innerHTML;
+    }
+
+    function getBlocks(content) {
+      if (!content || String(content).trim() === '') return [];
+      try {
+        if (typeof marked !== 'undefined' && typeof marked.lexer === 'function') {
+          var tokens = marked.lexer(content);
+          return tokens.map(function(t) { return { raw: t.raw || '', type: t.type || 'paragraph', depth: t.depth }; });
+        }
+      } catch (e) {}
+      return String(content).split(/\n\n+/).filter(Boolean).map(function(raw) { return { raw: raw, type: 'paragraph' }; });
+    }
+
+    function blocksToContent(blocks) {
+      if (blocks.length === 0) return '';
+      return blocks.map(function(b) { return b.raw || b; }).join('\n\n');
+    }
+
+    function getTabTitle(path) {
+      if (!path) return 'Welcome';
+      if (path.toLowerCase().endsWith('welcome.md')) return 'Welcome';
+      return path.replace(/^.*[/\\]/, '');
+    }
+
+    function addTab(options) {
+      var path = options.path || null;
+      var title = options.title != null ? options.title : getTabTitle(path);
+      var content = options.content;
+      var id = path || 'welcome';
+      var existing = tabs.filter(function (t) { return t.id === id; })[0];
+      if (existing) {
+        if (content != null) existing.content = content;
+        selectTab(id);
+        return;
+      }
+      tabs.push({ id: id, path: path, title: title, content: content });
+      activeTabId = id;
+      renderTabBar();
+      showTabContent(tabs[tabs.length - 1]);
+    }
+
+    function closeTab(id, e) {
+      if (e) e.stopPropagation();
+      var idx = tabs.findIndex(function (t) { return t.id === id; });
+      if (idx === -1) return;
+      tabs.splice(idx, 1);
+      if (activeTabId === id) {
+        if (tabs.length > 0) {
+          var next = tabs[Math.min(idx, tabs.length - 1)];
+          activeTabId = next.id;
+          showTabContent(next);
+        } else {
+          activeTabId = null;
+          showWelcomeOrEmpty();
+        }
+      }
+      renderTabBar();
+    }
+
+    function selectTab(id) {
+      activeTabId = id;
+      var tab = tabs.filter(function (t) { return t.id === id; })[0];
+      if (tab) showTabContent(tab);
+      renderTabBar();
+    }
+
+    function moveTab(fromIndex, toIndex) {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= tabs.length || toIndex >= tabs.length) return;
+      var t = tabs.splice(fromIndex, 1)[0];
+      tabs.splice(toIndex, 0, t);
+      renderTabBar();
+    }
+
+    function renderTabBar() {
+      tabBarEl.innerHTML = '';
+      if (tabs.length === 0) {
+        tabBarEl.classList.add('hidden');
+        return;
+      }
+      tabBarEl.classList.remove('hidden');
+      tabs.forEach(function (tab, index) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
+        btn.setAttribute('data-tab-id', tab.id);
+        btn.setAttribute('data-tab-index', index);
+        btn.setAttribute('draggable', 'true');
+        btn.innerHTML = '<span class="tab-title">' + escapeHtml(tab.title) + '</span><span class="tab-close" title="Close">×</span>';
+        btn.addEventListener('click', function (e) {
+          if (e.target.classList.contains('tab-close')) return;
+          selectTab(tab.id);
+        });
+        btn.querySelector('.tab-close').addEventListener('click', function (e) {
+          e.stopPropagation();
+          closeTab(tab.id, e);
+        });
+        btn.addEventListener('dragstart', function (e) {
+          e.dataTransfer.setData('text/plain', tab.id);
+          e.dataTransfer.effectAllowed = 'move';
+          e.target.classList.add('dragging');
+        });
+        btn.addEventListener('dragend', function (e) {
+          e.target.classList.remove('dragging');
+          tabBarEl.querySelectorAll('.tab.drop-target').forEach(function (el) { el.classList.remove('drop-target'); });
+        });
+        btn.addEventListener('dragover', function (e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          var overId = e.currentTarget.getAttribute('data-tab-id');
+          if (e.dataTransfer.getData('text/plain') === overId) return;
+          e.currentTarget.classList.add('drop-target');
+        });
+        btn.addEventListener('dragleave', function (e) {
+          e.currentTarget.classList.remove('drop-target');
+        });
+        btn.addEventListener('drop', function (e) {
+          e.preventDefault();
+          e.currentTarget.classList.remove('drop-target');
+          var draggedId = e.dataTransfer.getData('text/plain');
+          if (!draggedId || draggedId === tab.id) return;
+          var fromIdx = tabs.findIndex(function (t) { return t.id === draggedId; });
+          var toIdx = tabs.findIndex(function (t) { return t.id === tab.id; });
+          if (fromIdx !== -1 && toIdx !== -1) moveTab(fromIdx, toIdx);
+        });
+        tabBarEl.appendChild(btn);
+      });
+    }
+
+    function getActiveTab() {
+      return tabs.filter(function (t) { return t.id === activeTabId; })[0] || null;
+    }
+
+    function saveToFile(tab) {
+      if (!tab || !tab.path) return;
+      var a = getApi();
+      if (!a || typeof a.write_file !== 'function') {
+        showError('Save not available. Run from Markdown Reader.');
+        return;
+      }
+      a.write_file(tab.path, tab.content).then(function (res) {
+        if (res && res.error) {
+          showError(res.error);
+          return;
+        }
+      }).catch(function (err) {
+        showError(err && (err.message || err) || 'Save failed.');
+      });
+    }
+
+    function getCharacterOffset(container, node, nodeOffset) {
+      var offset = 0;
+      function walk(n) {
+        if (n === node) {
+          offset += nodeOffset;
+          return true;
+        }
+        if (n.nodeType === Node.TEXT_NODE) {
+          offset += n.textContent.length;
+          return false;
+        }
+        for (var i = 0; i < n.childNodes.length; i++) {
+          if (walk(n.childNodes[i])) return true;
+        }
+        return false;
+      }
+      walk(container);
+      return offset;
+    }
+
+    function renderedOffsetToSourceOffset(source, renderedText, offsetInRendered, blockType) {
+      var safeOffset = Math.max(0, Math.min(offsetInRendered, renderedText.length));
+      if (blockType === 'heading') {
+        var m = source.match(/^#+\s*/);
+        var prefixLen = m ? m[0].length : 0;
+        return prefixLen + safeOffset;
+      }
+      if (blockType === 'blockquote') {
+        var firstLine = source.split('\n')[0] || '';
+        var q = firstLine.match(/^>\s*/);
+        var prefixLen = q ? q[0].length : 0;
+        return Math.min(prefixLen + safeOffset, source.length);
+      }
+      return safeOffset;
+    }
+
+    function setCaretPosition(editable, position) {
+      editable.focus();
+      if (!editable.firstChild) return;
+      var text = editable.textContent || '';
+      var offset = Math.max(0, Math.min(position, text.length));
+      var sel = window.getSelection();
+      var range = document.createRange();
+      range.setStart(editable.firstChild, offset);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function startInlineEdit(blockEl, index, blocks, tab, clickEvent) {
+      if (blockEl.classList.contains('editing')) return;
+      var raw = blocks[index].raw || '';
+      var blockType = (blocks[index].type || 'paragraph');
+      var renderedText = blockEl.textContent || '';
+      var offsetInRendered = 0;
+      if (clickEvent) {
+        var range = null;
+        if (typeof document.caretRangeFromPoint === 'function') {
+          range = document.caretRangeFromPoint(clickEvent.clientX, clickEvent.clientY);
+        } else if (document.caretPositionFromPoint) {
+          var pos = document.caretPositionFromPoint(clickEvent.clientX, clickEvent.clientY);
+          if (pos) {
+            range = { startContainer: pos.offsetNode, startOffset: pos.offset };
+          }
+        }
+        if (range && blockEl.contains(range.startContainer)) {
+          offsetInRendered = getCharacterOffset(blockEl, range.startContainer, range.startOffset);
+        }
+      }
+      var sourceOffset = renderedOffsetToSourceOffset(raw, renderedText, offsetInRendered, blockType);
+
+      blockEl.classList.add('editing');
+      var isCodeBlock = blockType === 'code';
+      if (!isCodeBlock) {
+        var placeholder = document.createElement('div');
+        placeholder.className = 'md-block-placeholder';
+        while (blockEl.firstChild) placeholder.appendChild(blockEl.firstChild);
+        blockEl.appendChild(placeholder);
+      } else {
+        blockEl.innerHTML = '';
+      }
+      var editable = document.createElement('div');
+      editable.className = 'inline-edit';
+      editable.contentEditable = 'true';
+      editable.textContent = raw;
+      blockEl.appendChild(editable);
+
+      setTimeout(function () {
+        setCaretPosition(editable, sourceOffset);
+      }, 0);
+
+      function commit() {
+        var newRaw = (editable.innerText != null ? editable.innerText : editable.textContent || '').replace(/\u00a0/g, ' ');
+        blocks[index].raw = newRaw;
+        tab.content = blocksToContent(blocks);
+        currentTabRef.content = tab.content;
+        currentBlocks = blocks;
+        showTabContent(tab);
+      }
+
+      editable.addEventListener('blur', function onBlur() {
+        editable.removeEventListener('blur', onBlur);
+        commit();
+      });
+      editable.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          editable.blur();
+        }
+      });
+    }
+
+    function showTabContent(tab) {
+      if (!tab) return;
+      if (tab.content == null) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered"><div class="error">Content not loaded.</div></div>';
+        filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title;
+        return;
+      }
+      if (!tab.path) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered">' + marked.parse(tab.content) + '</div>';
+        filenameEl.textContent = tab.title;
+        return;
+      }
+      var blocks = getBlocks(tab.content);
+      currentBlocks = blocks;
+      currentTabRef = tab;
+      if (blocks.length === 0) {
+        contentEl.className = 'content read-mode';
+        contentEl.innerHTML = '<div class="rendered"><div class="md-block md-block-empty" data-block-index="0">' + marked.parse('\n') + '</div></div>';
+        currentBlocks = [{ raw: '', type: 'paragraph' }];
+      } else {
+        var html = '<div class="rendered">';
+        for (var i = 0; i < blocks.length; i++) {
+          var b = blocks[i];
+          var raw = typeof b === 'string' ? b : b.raw;
+          var type = typeof b === 'string' ? 'paragraph' : (b.type || 'paragraph');
+          var depth = typeof b === 'object' && b.depth;
+          var typeClass = 'md-block-' + escapeHtml(type) + (type === 'heading' && depth ? ' md-block-heading-' + depth : '');
+          html += '<div class="md-block ' + typeClass + '" data-block-index="' + i + '">' + marked.parse(raw) + '</div>';
+        }
+        html += '</div>';
+        contentEl.className = 'content read-mode';
+        contentEl.innerHTML = html;
+      }
+      filenameEl.textContent = getTabTitle(tab.path);
+
+      contentEl.querySelectorAll('.md-block').forEach(function (blockEl) {
+        blockEl.addEventListener('click', function (e) {
+          if (e.target.classList && e.target.classList.contains('inline-edit')) return;
+          var idx = parseInt(blockEl.getAttribute('data-block-index'), 10);
+          if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
+          startInlineEdit(blockEl, idx, currentBlocks, tab, e);
+        });
+      });
+    }
+
+    function showWelcomeOrEmpty() {
+      if (welcomeContent) {
+        contentEl.className = 'content';
+        contentEl.innerHTML = '<div class="rendered">' + marked.parse(welcomeContent) + '</div>';
+        filenameEl.textContent = 'Welcome';
+      } else {
+        contentEl.className = 'content empty';
+        contentEl.innerHTML = 'Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.';
+        filenameEl.textContent = '';
+      }
     }
 
     function render(data) {
@@ -623,7 +1101,7 @@
         return;
       }
       if (data.content == null) return;
-      filenameEl.textContent = data.path || '';
+      filenameEl.textContent = (data.path && data.path.toLowerCase().endsWith('welcome.md')) ? 'Welcome' : (data.path || '');
       contentEl.className = 'content';
       contentEl.innerHTML = '<div class="rendered">' + marked.parse(data.content) + '</div>';
     }
@@ -647,8 +1125,6 @@
       loadChildren(rootPath, rootLi);
       if (initialFilePath) {
         selectFile(initialFilePath);
-        var a = getApi();
-        if (a) a.read_file(initialFilePath).then(function (r) { render(r); }).catch(showError);
       }
     }
 
@@ -706,8 +1182,21 @@
         if (el.dataset.path === path) el.classList.add('selected');
       });
       selectedPath = path;
+      var existing = tabs.filter(function (t) { return t.path === path; })[0];
+      if (existing) {
+        selectTab(existing.id);
+        return;
+      }
       var a = getApi();
-      if (a) a.read_file(path).then(render).catch(showError);
+      if (a) {
+        a.read_file(path).then(function (data) {
+          if (data && data.content != null) {
+            addTab({ path: data.path, title: getTabTitle(data.path), content: data.content });
+          } else if (data && data.error) {
+            render({ path: path, content: null, error: data.error });
+          }
+        }).catch(showError);
+      }
     }
 
     function showError(err) {
@@ -736,7 +1225,9 @@
           render({ path: data.path, content: null, error: data.error });
           return;
         }
-        setTreeRoot(data.root, data.path);
+        addTab({ path: data.path, title: getTabTitle(data.path), content: data.content });
+        setTreeRoot(data.root, null);
+        selectFile(data.path);
       }).catch(showError);
     }
 
@@ -756,8 +1247,11 @@
           return;
         }
         setTreeRoot(data.root, null);
+        activeTabId = null;
+        renderTabBar();
         contentEl.className = 'content empty';
         contentEl.innerHTML = 'Select a file from the tree to view it.';
+        filenameEl.textContent = '';
       }).catch(showError);
     }
 
@@ -799,14 +1293,111 @@
       applyTheme(this.value);
     });
 
+    modeReadBtn.addEventListener('click', function () {
+      var tab = getActiveTab();
+      if (tab) switchToReadMode(tab);
+    });
+    modeEditBtn.addEventListener('click', function () {
+      var tab = getActiveTab();
+      if (tab && tab.path) switchToEditMode(tab);
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        var tab = getActiveTab();
+        if (tab && tab.path) {
+          e.preventDefault();
+          saveToFile(tab);
+        }
+      }
+    });
+
     (function initTheme() {
       try {
         const saved = localStorage.getItem(THEME_KEY);
         if (saved && themePicker.querySelector('option[value="' + saved + '"]')) {
           applyTheme(saved);
+        } else {
+          applyTheme('obsidianite');
         }
-      } catch (e) {}
+      } catch (e) {
+        applyTheme('obsidianite');
+      }
     })();
+
+    function showFallbackContent() {
+      contentEl.className = 'content empty';
+      contentEl.innerHTML = 'Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.';
+    }
+
+    function loadWelcome() {
+      var a = getApi();
+      if (!a || typeof a.get_welcome !== 'function') {
+        showFallbackContent();
+        return;
+      }
+      var done = false;
+      function finish(data) {
+        if (done) return;
+        done = true;
+        if (data && data.content) {
+          welcomeContent = data.content;
+          contentEl.className = 'content';
+          contentEl.innerHTML = '<div class="rendered">' + marked.parse(data.content) + '</div>';
+          filenameEl.textContent = 'Welcome';
+        } else {
+          showFallbackContent();
+        }
+      }
+      var timeoutId = setTimeout(function () { finish(null); }, 2500);
+      a.get_welcome().then(function (data) {
+        clearTimeout(timeoutId);
+        finish(data);
+      }).catch(function () {
+        clearTimeout(timeoutId);
+        finish(null);
+      });
+    }
+
+    var welcomeLoaded = false;
+    function whenApiReady(fn) {
+      var maxRetries = 25;
+      var retries = 0;
+      function run() {
+        if (welcomeLoaded) return;
+        if (getApi()) {
+          welcomeLoaded = true;
+          fn();
+          return;
+        }
+        retries++;
+        if (retries < maxRetries) {
+          setTimeout(run, 200);
+        } else {
+          welcomeLoaded = true;
+          fn();
+        }
+      }
+      window.addEventListener('pywebviewready', function onReady() {
+        window.removeEventListener('pywebviewready', onReady);
+        run();
+      });
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () {
+          setTimeout(run, 100);
+        });
+      } else {
+        setTimeout(run, 100);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () {
+        whenApiReady(loadWelcome);
+      });
+    } else {
+      whenApiReady(loadWelcome);
+    }
   </script>
 </body>
 </html>

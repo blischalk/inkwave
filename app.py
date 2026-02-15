@@ -3,6 +3,7 @@ Markdown Reader - A simple desktop app to view markdown files rendered.
 Uses PyWebView (system web view) and requires only: pip install pywebview
 """
 
+import json
 import os
 import sys
 
@@ -137,6 +138,30 @@ class Api:
         except Exception as e:
             return {"path": path, "content": None, "error": str(e)}
 
+    def write_file(self, path, content):
+        """Write content to a markdown file. Returns { path, error? }."""
+        if not path:
+            return {"path": path, "error": "No path."}
+        if not path.lower().endswith(MD_EXTENSIONS):
+            return {"path": path, "error": "Not a markdown file."}
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(content)
+            return {"path": path}
+        except Exception as e:
+            return {"path": path, "error": str(e)}
+
+    def get_welcome(self):
+        """Return the bundled Welcome.md content for the default startup view. Returns None if not found."""
+        path = os.path.join(BASE_DIR, "Welcome.md")
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return {"path": path, "content": f.read()}
+        except Exception:
+            return None
+
 
 def main():
     if os.name == "nt":
@@ -146,12 +171,28 @@ def main():
     window = webview.create_window(
         "Markdown Reader",
         os.path.join(BASE_DIR, "index.html"),
-        width=900,
-        height=700,
+        width=1200,
+        height=800,
         min_size=(500, 400),
         js_api=api,
     )
     object.__setattr__(api, "_window", window)
+
+    def inject_welcome():
+        try:
+            data = api.get_welcome()
+            if data and data.get("content") is not None:
+                arg = json.dumps(data)
+                window.evaluate_js(
+                    "if (window.__applyWelcome) window.__applyWelcome(" + json.dumps(arg) + ");"
+                )
+        except Exception:
+            pass
+
+    try:
+        window.events.loaded += inject_welcome
+    except Exception:
+        pass
 
     start_kw = {"debug": False}
     if os.name == "nt":
