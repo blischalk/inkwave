@@ -16,6 +16,8 @@
       flex-direction: column;
       background: var(--bg);
       color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
       transition: background 0.2s ease, color 0.2s ease;
     }
 
@@ -45,6 +47,30 @@
     }
     .btn:hover { filter: brightness(1.08); }
     .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:disabled:hover { filter: none; }
+    .btn-secondary {
+      background: var(--code-bg);
+      color: var(--text);
+    }
+    .btn-secondary:hover { filter: brightness(1.1); }
+    .btn-icon {
+      padding: 8px 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+    }
+    .btn-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+    .btn-icon .chevron { margin-left: 2px; }
     .open-wrap {
       position: relative;
     }
@@ -110,6 +136,8 @@
       min-height: 0;
       flex-shrink: 0;
       overflow-x: auto;
+      max-height: 52px;
+      transition: opacity 0.3s ease, max-height 0.3s ease, visibility 0.3s ease;
     }
     .tab-bar.hidden { display: none; }
     .tab {
@@ -158,7 +186,7 @@
       border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      transition: width 0.2s ease, min-width 0.2s ease;
+      transition: width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease, visibility 0.3s ease;
     }
     .sidebar.collapsed {
       width: 0;
@@ -234,6 +262,31 @@
     .tree-item.folder .icon { color: var(--accent); }
     .tree-item.file .icon { color: var(--muted); }
     .tree-item .name { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .context-menu {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      min-width: 160px;
+      padding: 4px 0;
+      background: var(--toolbar-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .context-menu.visible { display: block; }
+    .context-menu button {
+      display: block;
+      width: 100%;
+      padding: 8px 14px;
+      border: none;
+      background: none;
+      color: var(--text);
+      font-size: 0.9rem;
+      text-align: left;
+      cursor: pointer;
+    }
+    .context-menu button:hover { background: var(--code-bg); }
     .show-sidebar-btn {
       display: none;
       position: fixed;
@@ -248,8 +301,84 @@
       color: var(--muted);
       cursor: pointer;
       font-size: 0.8rem;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
     }
     .sidebar.collapsed ~ .show-sidebar-btn { display: block; }
+
+    /* Focus mode: full screen content only – smooth transitions */
+    body[data-focus-mode="true"] .toolbar,
+    body[data-focus-mode="true"] .tab-bar {
+      max-height: 0;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    body[data-focus-mode="true"] .sidebar {
+      width: 0;
+      min-width: 0;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    body[data-focus-mode="true"] .show-sidebar-btn,
+    body[data-focus-mode="true"] .context-menu {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    body[data-focus-mode="true"] .main-wrap {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      transition: none;
+    }
+    body[data-focus-mode="true"] .content-area {
+      position: absolute;
+      inset: 0;
+    }
+    body[data-focus-mode="true"] .content {
+      padding: 48px 64px 80px;
+    }
+    .focus-exit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 50;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      background: var(--toolbar-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.3s ease, visibility 0.3s ease, color 0.2s ease;
+    }
+    .focus-exit svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.25;
+    }
+    .focus-exit:hover { color: var(--accent); }
+    body[data-focus-mode="true"] .focus-exit {
+      opacity: 0.9;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
+
     .content-area {
       flex: 1;
       display: flex;
@@ -260,6 +389,7 @@
       flex: 1;
       overflow: auto;
       padding: 24px 32px 48px;
+      transition: padding 0.3s ease;
     }
     .content.empty {
       display: flex;
@@ -271,9 +401,16 @@
       padding: 2rem;
     }
     .rendered {
-      max-width: 720px;
-      margin: 0 auto;
-      line-height: 1.65;
+      max-width: 760px;
+      margin: 0 auto 3rem;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+    .rendered > *:first-child {
+      margin-top: 0;
+    }
+    .rendered > *:last-child {
+      margin-bottom: 0;
     }
     .md-block {
       position: relative;
@@ -294,20 +431,16 @@
       background: transparent;
     }
     .md-block.editing .md-block-placeholder {
+      position: absolute;
       visibility: hidden;
       pointer-events: none;
     }
     .md-block.editing .inline-edit {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      overflow: auto;
-    }
-    .md-block-code.editing .inline-edit {
       position: static;
       overflow: visible;
+      min-height: 1em;
+    }
+    .md-block-code.editing .inline-edit {
       min-height: 3em;
     }
     .md-block .inline-edit {
@@ -340,14 +473,98 @@
     .md-block-paragraph .inline-edit { color: var(--text); }
     .md-block-code .inline-edit { font-family: "Cascadia Code", "Consolas", monospace; font-size: 0.9em; color: var(--code); white-space: pre; }
     .md-block-blockquote .inline-edit { color: var(--muted); }
-    .rendered h1 { font-size: 1.85rem; margin: 1.5em 0 0.5em; color: var(--h1); font-weight: 700; }
+    .md-block-list .inline-edit {
+      padding-left: 1.5em;
+      color: var(--text);
+    }
+    .md-block-list.editing .inline-edit::before {
+      content: '•';
+      position: absolute;
+      left: 0.25em;
+      top: 0;
+      color: var(--accent);
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .md-list-container {
+      margin: 0.2em 0;
+      padding-left: 1.5em;
+    }
+    ul.md-list-container {
+      list-style-type: disc;
+      list-style-position: outside;
+    }
+    .md-list-container .md-block-list {
+      margin: 0.35em 0;
+      padding-left: 0;
+      position: relative;
+    }
+    .md-list-container .md-block-list.editing {
+      padding-left: 1.5em;
+      list-style: none;
+    }
+    .md-list-container .md-block-list.editing::before {
+      content: '•';
+      position: absolute;
+      left: 0.25em;
+      top: 0;
+      color: var(--accent);
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .md-list-container ol .md-block-list.editing::before {
+      content: none;
+    }
+    .md-list-container ol {
+      list-style-type: decimal;
+    }
+    .rendered h1 {
+      font-size: 2rem;
+      line-height: 1.2;
+      margin: 1.8em 0 0.6em;
+      color: var(--h1);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
     .rendered h1:first-child { margin-top: 0; }
-    .rendered h2 { font-size: 1.5rem; margin: 1.35em 0 0.45em; color: var(--h2); font-weight: 600; }
-    .rendered h3 { font-size: 1.25rem; margin: 1.2em 0 0.4em; color: var(--h3); font-weight: 600; }
-    .rendered h4, .rendered h5, .rendered h6 { font-size: 1.1rem; margin: 1em 0 0.35em; color: var(--h4); font-weight: 600; }
-    .rendered p { margin: 0.85em 0; color: var(--text); }
-    .rendered ul, .rendered ol { margin: 0.85em 0; padding-left: 1.5em; }
-    .rendered li { margin: 0.35em 0; }
+    .rendered h2 {
+      font-size: 1.6rem;
+      line-height: 1.25;
+      margin: 1.5em 0 0.55em;
+      color: var(--h2);
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .rendered h3 {
+      font-size: 1.3rem;
+      line-height: 1.3;
+      margin: 1.3em 0 0.5em;
+      color: var(--h3);
+      font-weight: 600;
+    }
+    .rendered h4,
+    .rendered h5,
+    .rendered h6 {
+      font-size: 1.1rem;
+      line-height: 1.35;
+      margin: 1.1em 0 0.45em;
+      color: var(--h4);
+      font-weight: 600;
+    }
+    .rendered p {
+      margin: 0.9em 0;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .rendered ul,
+    .rendered ol {
+      margin: 0.9em 0;
+      padding-left: 1.5em;
+      line-height: 1.7;
+    }
+    .rendered .md-block-list ul, .rendered .md-block-list ol { margin: 0.2em 0; }
+    .rendered li { margin: 0.4em 0; }
+    .rendered .md-block-list li { margin: 0.2em 0; }
     .rendered blockquote {
       margin: 1em 0;
       padding: 0.5em 1em;
@@ -397,6 +614,32 @@
       border-radius: 8px;
       margin: 1em 0;
     }
+
+    .debug-panel {
+      display: none;
+      position: fixed;
+      bottom: 8px;
+      left: 8px;
+      right: 8px;
+      max-height: 320px;
+      overflow: auto;
+      z-index: 9999;
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.35;
+      padding: 8px;
+      background: rgba(0,0,0,0.92);
+      color: #8f8;
+      border: 1px solid #4a4;
+      border-radius: 6px;
+      pointer-events: auto;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    body[data-debug="true"] .debug-panel { display: block; }
+    .debug-line { word-break: break-all; }
+    .debug-header { color: #aaa; margin-bottom: 4px; }
+    .debug-key { color: #ff8; }
 
     /* Theme: Obsidianite (default – dark, neon-inspired, from Obsidian) */
     body[data-theme="obsidianite"],
@@ -680,12 +923,21 @@
   <div class="toolbar">
     <h1>Markdown Reader</h1>
     <div class="open-wrap">
-      <button class="btn" id="openBtn" type="button">Open file or folder ▾</button>
+      <button class="btn btn-icon" id="openBtn" type="button" title="Open file or folder" aria-label="Open file or folder">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="2 12 6 12 8 12 22 12"/></svg>
+        <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
       <div class="open-menu" id="openMenu">
         <button type="button" data-action="file">Open file</button>
         <button type="button" data-action="folder">Open folder</button>
       </div>
     </div>
+    <button type="button" class="btn btn-secondary btn-icon" id="newFileBtn" title="Create a new markdown file in the current folder" aria-label="New file">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+    </button>
+    <button type="button" class="btn btn-icon" id="focusBtn" title="Focus mode: hide menu and file tree (Esc to exit)" aria-label="Focus mode">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
     <label class="theme-label">
       Theme
       <select class="theme-picker" id="themePicker" title="Choose reading theme">
@@ -718,15 +970,51 @@
         <ul class="tree" id="tree"></ul>
       </div>
     </aside>
+    <div class="context-menu" id="treeContextMenu">
+      <button type="button" id="newFileHereBtn">New file here</button>
+      <button type="button" id="deleteFileBtn">Delete</button>
+    </div>
     <button type="button" class="show-sidebar-btn" id="showSidebarBtn" title="Show file tree">▶ Files</button>
+    <button type="button" class="focus-exit" id="focusExitBtn" title="Exit focus mode (Esc)" aria-label="Exit focus mode">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18"/>
+      </svg>
+    </button>
     <div class="content-area">
       <div class="content empty" id="content">
         Loading…
       </div>
     </div>
+    <div id="debugPanel" class="debug-panel" aria-live="polite"><div class="debug-line debug-header">Debug log (new doc → # A → Enter → B)</div></div>
   </div>
 
   <script>
+    var DEBUG_ENTER = false; // set true to show debug log; or press Ctrl+Shift+D to toggle
+    var DEBUG_MAX_LINES = 100;
+    if (DEBUG_ENTER) document.body.setAttribute('data-debug', 'true');
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        var on = document.body.getAttribute('data-debug') === 'true';
+        document.body.setAttribute('data-debug', on ? 'false' : 'true');
+      }
+    });
+    function dbg() {
+      if (!DEBUG_ENTER) return;
+      var a = [];
+      for (var i = 0; i < arguments.length; i++) a.push(arguments[i]);
+      var msg = a.join(' ');
+      console.log('[MD]', msg);
+      var el = document.getElementById('debugPanel');
+      if (el) {
+        var line = document.createElement('div');
+        line.className = 'debug-line';
+        line.textContent = '[MD] ' + msg;
+        el.appendChild(line);
+        while (el.children.length > DEBUG_MAX_LINES + 1) el.removeChild(el.children[1]);
+        el.scrollTop = el.scrollHeight;
+      }
+    }
     const contentEl = document.getElementById('content');
     const filenameEl = document.getElementById('filename');
     const treeEl = document.getElementById('tree');
@@ -751,6 +1039,11 @@
     const sidebar = document.getElementById('sidebar');
     const openBtn = document.getElementById('openBtn');
     const openMenu = document.getElementById('openMenu');
+    const newFileBtn = document.getElementById('newFileBtn');
+    const treeContextMenu = document.getElementById('treeContextMenu');
+    const newFileHereBtn = document.getElementById('newFileHereBtn');
+    const treeWrap = document.querySelector('.tree-wrap');
+    const deleteFileBtn = document.getElementById('deleteFileBtn');
 
     function getApi() {
       return window.pywebview && window.pywebview.api;
@@ -764,6 +1057,7 @@
     let activeTabId = null;
     var currentBlocks = [];
     var currentTabRef = null;
+    var _replacingContent = false;
 
     var folderIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
     var fileIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>';
@@ -774,20 +1068,92 @@
       return div.innerHTML;
     }
 
+    function blockRaw(b) {
+      var r = typeof b === 'string' ? b : (b && b.raw);
+      return (typeof r === 'string' ? r : (r != null ? String(r) : ''));
+    }
+
     function getBlocks(content) {
       if (!content || String(content).trim() === '') return [];
       try {
         if (typeof marked !== 'undefined' && typeof marked.lexer === 'function') {
           var tokens = marked.lexer(content);
-          return tokens.map(function(t) { return { raw: t.raw || '', type: t.type || 'paragraph', depth: t.depth }; });
+          var out = [];
+          for (var i = 0; i < tokens.length; i++) {
+            var t = tokens[i];
+            if (!t || t.type === 'space') continue;
+            var raw = (t.raw != null) ? (typeof t.raw === 'string' ? t.raw : String(t.raw)) : '';
+            if (t.type === 'list') {
+              var lines = raw.split(/\r?\n/);
+              for (var j = 0; j < lines.length; j++) {
+                var line = lines[j];
+                if (/^\s*([-*]\s|\d+\.\s)/.test(line) && line.trim() !== '') {
+                  out.push({ raw: line.replace(/^\s+/, ''), type: 'list' });
+                }
+              }
+              continue;
+            }
+            out.push({ raw: raw, type: (t.type) || 'paragraph', depth: t.depth });
+          }
+          return out;
         }
       } catch (e) {}
-      return String(content).split(/\n\n+/).filter(Boolean).map(function(raw) { return { raw: raw, type: 'paragraph' }; });
+      var parts = String(content).split(/\n\n+/);
+      return parts.map(function(raw) { return { raw: raw, type: 'paragraph' }; });
     }
 
     function blocksToContent(blocks) {
       if (blocks.length === 0) return '';
-      return blocks.map(function(b) { return b.raw || b; }).join('\n\n');
+      return blocks.map(function(b) { return blockRaw(b); }).join('\n\n');
+    }
+
+    function getInlineBlockType(text) {
+      var line = (typeof text === 'string' ? text : '').split('\n')[0] || '';
+      var t = line.trimStart();
+      if (/^```/.test(t)) {
+        return { type: 'code' };
+      }
+      if (/^#+\s/.test(t)) {
+        var n = (t.match(/^#+/) || [''])[0].length;
+        return { type: 'heading', depth: Math.min(n, 6) || 1 };
+      }
+      if (/^>\s/.test(t)) return { type: 'blockquote' };
+      if (/^[-*]\s/.test(t) || /^\d+\.\s/.test(t)) return { type: 'list' };
+      return { type: 'paragraph' };
+    }
+
+    function getListPrefix(raw) {
+      if (!raw || typeof raw !== 'string') return '- ';
+      var m = raw.match(/^([-*]\s|\d+\.\s)/);
+      return m ? m[1] : '- ';
+    }
+
+    function stripListMarker(raw) {
+      if (!raw || typeof raw !== 'string') return '';
+      return raw.replace(/^([-*]\s|\d+\.\s)/, '');
+    }
+
+    function isOrderedListPrefix(prefix) {
+      return prefix && /^\d+\.\s$/.test(prefix);
+    }
+
+    function getListItemDisplayHtml(raw) {
+      if (!raw || typeof raw !== 'string') return '';
+      var parsed = marked.parse(raw);
+      var div = document.createElement('div');
+      div.innerHTML = parsed;
+      var li = div.querySelector('ul li, ol li');
+      return li ? li.innerHTML : escapeHtml(stripListMarker(raw));
+    }
+
+    function applyBlockTypeFromText(blockEl, text) {
+      if (!blockEl || !blockEl.classList) return;
+      var info = getInlineBlockType(text);
+      blockEl.classList.remove('md-block-paragraph', 'md-block-heading-1', 'md-block-heading-2', 'md-block-heading-3', 'md-block-heading-4', 'md-block-heading-5', 'md-block-heading-6', 'md-block-blockquote', 'md-block-list', 'md-block-code');
+      blockEl.classList.add('md-block-' + info.type);
+      if (info.type === 'heading' && info.depth) {
+        blockEl.classList.add('md-block-heading-' + info.depth);
+      }
     }
 
     function getTabTitle(path) {
@@ -921,11 +1287,48 @@
       });
     }
 
+    function flushActiveEditAndSave() {
+      var tab = currentTabRef;
+      if (!tab || !tab.path) return;
+      var editingBlock = contentEl.querySelector('.md-block.editing');
+      if (editingBlock) {
+        var editable = editingBlock.querySelector('.inline-edit');
+        if (editable && currentBlocks.length) {
+          var idx = parseInt(editingBlock.getAttribute('data-block-index'), 10);
+          if (!isNaN(idx) && idx >= 0 && idx < currentBlocks.length) {
+            var text = (editable.innerText != null ? editable.innerText : editable.textContent || '').replace(/\u00a0/g, ' ');
+            var raw = currentBlocks[idx].raw;
+            var prefix = '';
+            if (editingBlock.classList.contains('md-block-list') && raw) {
+              var m = raw.match(/^(\s*[-*+]|\s*\d+\.)\s*/);
+              if (m) prefix = m[1];
+            }
+            currentBlocks[idx].raw = prefix + text;
+            tab.content = blocksToContent(currentBlocks);
+          }
+        }
+      }
+      saveToFile(tab);
+    }
+
+    function getTextLength(node) {
+      if (node.nodeType === Node.TEXT_NODE) return (node.textContent || '').length;
+      var len = 0;
+      for (var i = 0; i < node.childNodes.length; i++) len += getTextLength(node.childNodes[i]);
+      return len;
+    }
+
     function getCharacterOffset(container, node, nodeOffset) {
       var offset = 0;
       function walk(n) {
         if (n === node) {
-          offset += nodeOffset;
+          if (n.nodeType === Node.TEXT_NODE) {
+            offset += nodeOffset;
+          } else {
+            for (var i = 0; i < nodeOffset && i < n.childNodes.length; i++) {
+              offset += getTextLength(n.childNodes[i]);
+            }
+          }
           return true;
         }
         if (n.nodeType === Node.TEXT_NODE) {
@@ -957,23 +1360,205 @@
       return safeOffset;
     }
 
+    function getCaretOffset(editable) {
+      var sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return 0;
+      var range = sel.getRangeAt(0);
+      if (!editable.contains(range.startContainer)) return 0;
+      return getCharacterOffset(editable, range.startContainer, range.startOffset);
+    }
+
     function setCaretPosition(editable, position) {
       editable.focus();
       if (!editable.firstChild) return;
-      var text = editable.textContent || '';
-      var offset = Math.max(0, Math.min(position, text.length));
+      var totalLen = getTextLength(editable);
+      var offset = Math.max(0, Math.min(position, totalLen));
       var sel = window.getSelection();
       var range = document.createRange();
-      range.setStart(editable.firstChild, offset);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
+      var found = false;
+      function walk(n, remaining) {
+        if (n.nodeType === Node.TEXT_NODE) {
+          var len = (n.textContent || '').length;
+          if (remaining <= len) {
+            range.setStart(n, remaining);
+            range.collapse(true);
+            found = true;
+            return true;
+          }
+          return remaining - len;
+        }
+        for (var i = 0; i < n.childNodes.length; i++) {
+          var r = walk(n.childNodes[i], remaining);
+          if (r === true) return true;
+          remaining = r;
+        }
+        return remaining;
+      }
+      walk(editable, offset);
+      if (found) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
     }
 
     function startInlineEdit(blockEl, index, blocks, tab, clickEvent) {
       if (blockEl.classList.contains('editing')) return;
-      var raw = blocks[index].raw || '';
+      var raw = blockRaw(blocks[index]);
       var blockType = (blocks[index].type || 'paragraph');
+      dbg('startInlineEdit: index=', index, 'raw=' + JSON.stringify(raw), 'blockType=', blockType);
+      var explicitOffset = (arguments.length > 5 && typeof arguments[5] === 'number') ? arguments[5] : null;
+
+      var isListItemInPlace = blockEl.tagName === 'LI' && blockEl.parentNode && blockEl.parentNode.classList && blockEl.parentNode.classList.contains('md-list-container');
+      if (isListItemInPlace) {
+        var listPrefix = getListPrefix(raw);
+        var stripped = stripListMarker(raw);
+        var offsetInRenderedLi = 0;
+        if (clickEvent) {
+          var range = null;
+          if (typeof document.caretRangeFromPoint === 'function') {
+            range = document.caretRangeFromPoint(clickEvent.clientX, clickEvent.clientY);
+          } else if (document.caretPositionFromPoint) {
+            var pos = document.caretPositionFromPoint(clickEvent.clientX, clickEvent.clientY);
+            if (pos) range = { startContainer: pos.offsetNode, startOffset: pos.offset };
+          }
+          if (range && blockEl.contains(range.startContainer)) {
+            offsetInRenderedLi = getCharacterOffset(blockEl, range.startContainer, range.startOffset);
+          }
+        }
+        var cursorAtEndLi = arguments[5] === true;
+        blockEl.classList.add('editing');
+        blockEl.contentEditable = 'true';
+        blockEl.textContent = stripped;
+        if (!blockEl.firstChild) blockEl.appendChild(document.createTextNode(''));
+        var offsetInLi = cursorAtEndLi ? stripped.length : Math.min(offsetInRenderedLi, stripped.length);
+
+        function getEditableText() {
+          return (blockEl.innerText != null ? blockEl.innerText : blockEl.textContent || '').replace(/\u00a0/g, ' ');
+        }
+        function getFullRaw() { return listPrefix + getEditableText(); }
+        function syncContentAndAutosave() {
+          blocks[index].raw = getFullRaw();
+          tab.content = blocksToContent(blocks);
+          currentTabRef.content = tab.content;
+          saveToFile(tab);
+        }
+        function commit() {
+          if (_replacingContent || !blocks[index]) return;
+          blocks[index].raw = getFullRaw();
+          tab.content = blocksToContent(blocks);
+          currentTabRef.content = tab.content;
+          currentBlocks = blocks;
+          saveToFile(tab);
+          if (!_replacingContent) showTabContent(tab);
+        }
+
+        blockEl.addEventListener('input', syncContentAndAutosave);
+        blockEl.addEventListener('blur', function onBlur() {
+          blockEl.removeEventListener('blur', onBlur);
+          blockEl.removeEventListener('input', syncContentAndAutosave);
+          blockEl.contentEditable = 'false';
+          blockEl.classList.remove('editing');
+          commit();
+        });
+        blockEl.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') { e.preventDefault(); blockEl.blur(); return; }
+          if (e.key === 'Backspace' && index > 0 && getEditableText().trim() === '') {
+            e.preventDefault();
+            blocks.splice(index, 1);
+            tab.content = blocksToContent(blocks);
+            currentTabRef.content = tab.content;
+            currentBlocks = blocks;
+            saveToFile(tab);
+            showTabContent(tab);
+            setTimeout(function () {
+              var prev = contentEl.querySelector('.md-block[data-block-index="' + (index - 1) + '"]');
+              if (prev) startInlineEdit(prev, index - 1, currentBlocks, tab, null, true);
+            }, 0);
+            return;
+          }
+          if (e.key === 'Enter' && e.shiftKey) {
+            e.preventDefault();
+            document.execCommand('insertLineBreak', false, null);
+            syncContentAndAutosave();
+            return;
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            var text = getEditableText();
+            var offset = Math.max(0, Math.min(getCaretOffset(blockEl), text.length));
+            var beforeCursor = text.slice(0, offset);
+            var afterCursor = text.slice(offset);
+            var isLastBlock = (index === blocks.length - 1);
+            var isEmptyItem = text.trim() === '' || stripListMarker(blocks[index].raw || '').trim() === '';
+            if (isLastBlock && isEmptyItem) {
+              blocks.splice(index, 1);
+              blocks.push({ raw: '', type: 'paragraph' });
+              tab.content = blocksToContent(blocks);
+              currentTabRef.content = tab.content;
+              currentBlocks = blocks;
+              saveToFile(tab);
+              var focusIndex = blocks.length - 1;
+              showTabContent(tab, blocks);
+              requestAnimationFrame(function () {
+                setTimeout(function () {
+                  var nextEl = contentEl.querySelector('.md-block[data-block-index="' + focusIndex + '"]');
+                  if (nextEl) {
+                    startInlineEdit(nextEl, focusIndex, currentBlocks, tab, null, true);
+                    var edit = nextEl.tagName === 'LI' ? nextEl : nextEl.querySelector('.inline-edit');
+                    if (edit) {
+                      edit.focus();
+                      setCaretPosition(edit, 0);
+                    }
+                  }
+                }, 0);
+              });
+              return;
+            }
+            if (isEmptyItem) {
+              blocks.splice(index, 1);
+              tab.content = blocksToContent(blocks);
+              currentTabRef.content = tab.content;
+              currentBlocks = blocks;
+              saveToFile(tab);
+              showTabContent(tab, blocks);
+              setTimeout(function () {
+                var nextEl = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+                if (nextEl) {
+                  startInlineEdit(nextEl, index, currentBlocks, tab, null, false);
+                  var edit = nextEl.tagName === 'LI' ? nextEl : nextEl.querySelector('.inline-edit');
+                  if (edit) { edit.focus(); setCaretPosition(edit, 0); }
+                }
+              }, 10);
+              return;
+            }
+            blocks[index].raw = listPrefix + beforeCursor;
+            blocks.splice(index + 1, 0, { raw: listPrefix + afterCursor, type: 'list' });
+            tab.content = blocksToContent(blocks);
+            currentTabRef.content = tab.content;
+            currentBlocks = blocks;
+            saveToFile(tab);
+            requestAnimationFrame(function () {
+              showTabContent(tab, blocks);
+              setTimeout(function () {
+                var newLi = contentEl.querySelector('.md-block[data-block-index="' + (index + 1) + '"]');
+                if (newLi) {
+                  startInlineEdit(newLi, index + 1, currentBlocks, tab, null);
+                  newLi.focus();
+                  setCaretPosition(newLi, 0);
+                  setTimeout(function () { if (document.activeElement !== newLi) { newLi.focus(); setCaretPosition(newLi, 0); } }, 0);
+                }
+              }, 0);
+            });
+            return;
+          }
+        });
+
+        blockEl.focus();
+        setTimeout(function () { setCaretPosition(blockEl, offsetInLi); }, 0);
+        return;
+      }
+
       var renderedText = blockEl.textContent || '';
       var offsetInRendered = 0;
       if (clickEvent) {
@@ -991,6 +1576,10 @@
         }
       }
       var sourceOffset = renderedOffsetToSourceOffset(raw, renderedText, offsetInRendered, blockType);
+      var cursorAtEnd = arguments[5] === true;
+      if (cursorAtEnd) {
+        sourceOffset = blockType === 'list' ? stripListMarker(raw).length : (raw ? raw.length : 0);
+      }
 
       blockEl.classList.add('editing');
       var isCodeBlock = blockType === 'code';
@@ -1002,23 +1591,70 @@
       } else {
         blockEl.innerHTML = '';
       }
+      var listPrefix = blockType === 'list' ? getListPrefix(raw) : null;
       var editable = document.createElement('div');
       editable.className = 'inline-edit';
       editable.contentEditable = 'true';
-      editable.textContent = raw;
+      editable.textContent = blockType === 'list' ? stripListMarker(raw) : raw;
+      if (!editable.firstChild) editable.appendChild(document.createTextNode(''));
       blockEl.appendChild(editable);
 
-      setTimeout(function () {
-        setCaretPosition(editable, sourceOffset);
-      }, 0);
+      function getEditableText() {
+        return (editable.innerText != null ? editable.innerText : editable.textContent || '').replace(/\u00a0/g, ' ');
+      }
+      function getFullRaw() {
+        return listPrefix != null ? listPrefix + getEditableText() : getEditableText();
+      }
+      function syncBlockType() {
+        var full = getFullRaw();
+        var info = getInlineBlockType(full);
+        if (info.type === 'list' && listPrefix == null) {
+          listPrefix = getListPrefix(full);
+          var stripped = stripListMarker(full);
+          if ((editable.textContent || '') !== stripped) {
+            editable.textContent = stripped || '';
+            if (!editable.firstChild) editable.appendChild(document.createTextNode(''));
+          }
+        }
+        applyBlockTypeFromText(blockEl, full);
+        blocks[index].type = info.type;
+        if (info.depth) blocks[index].depth = info.depth;
+      }
+      function syncContentAndAutosave() {
+        blocks[index].raw = getFullRaw();
+        tab.content = blocksToContent(blocks);
+        currentTabRef.content = tab.content;
+        saveToFile(tab);
+      }
+      syncBlockType();
+      editable.addEventListener('input', function () {
+        syncBlockType();
+        syncContentAndAutosave();
+      });
+
+      var isEmptyBlock = !raw || String(raw).trim() === '';
+      var initialOffset = explicitOffset != null ? explicitOffset : sourceOffset;
+      if (isEmptyBlock) {
+        dbg('startInlineEdit: empty block, focus now');
+        setCaretPosition(editable, initialOffset);
+      } else {
+        setTimeout(function () {
+          setCaretPosition(editable, initialOffset);
+        }, 0);
+      }
 
       function commit() {
-        var newRaw = (editable.innerText != null ? editable.innerText : editable.textContent || '').replace(/\u00a0/g, ' ');
+        if (_replacingContent || !blocks[index]) return;
+        var newRaw = getFullRaw();
+        var info = getInlineBlockType(newRaw);
         blocks[index].raw = newRaw;
+        blocks[index].type = info.type;
+        if (info.depth) blocks[index].depth = info.depth;
         tab.content = blocksToContent(blocks);
         currentTabRef.content = tab.content;
         currentBlocks = blocks;
-        showTabContent(tab);
+        saveToFile(tab);
+        if (!_replacingContent) showTabContent(tab);
       }
 
       editable.addEventListener('blur', function onBlur() {
@@ -1030,54 +1666,293 @@
           e.preventDefault();
           editable.blur();
         }
+        if (e.key === 'Backspace' && index > 0 && getEditableText().trim() === '') {
+          e.preventDefault();
+          blocks.splice(index, 1);
+          tab.content = blocksToContent(blocks);
+          currentTabRef.content = tab.content;
+          currentBlocks = blocks;
+          saveToFile(tab);
+          showTabContent(tab);
+          setTimeout(function () {
+            var prevBlockEl = contentEl.querySelector('.md-block[data-block-index="' + (index - 1) + '"]');
+            if (prevBlockEl) startInlineEdit(prevBlockEl, index - 1, currentBlocks, tab, null, true);
+          }, 0);
+          return;
+        }
+        if (e.key === 'Enter' && e.shiftKey) {
+          e.preventDefault();
+          document.execCommand('insertLineBreak', false, null);
+          syncContentAndAutosave();
+          return;
+        }
+        if (e.key === 'Enter') {
+          var text = getEditableText();
+          var offset = Math.max(0, Math.min(getCaretOffset(editable), text.length));
+
+          if (blockEl.classList.contains('md-block-code')) {
+            var firstLine = text.split('\n')[0] || '';
+            var openFenceMatch = firstLine.match(/^```(\w+)?$/);
+            var onlyFenceLine = text.trim() === firstLine.trim() && offset === text.length;
+            // Content is just opening fence (e.g. ``` or ```python) and cursor at end → complete block and focus inside.
+            if (openFenceMatch && onlyFenceLine) {
+              e.preventDefault();
+              e.stopPropagation();
+              var lang = openFenceMatch[1] || '';
+              var fence = '```' + lang;
+              var rawCodeBlock = fence + '\n\n```';
+              blocks[index].raw = rawCodeBlock;
+              blocks[index].type = 'code';
+              delete blocks[index].depth;
+              tab.content = blocksToContent(blocks);
+              currentTabRef.content = tab.content;
+              currentBlocks = blocks;
+              saveToFile(tab);
+              requestAnimationFrame(function () {
+                showTabContent(tab, currentBlocks);
+                setTimeout(function () {
+                  var codeBlockEl = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+                  if (!codeBlockEl) return;
+                  startInlineEdit(codeBlockEl, index, currentBlocks, tab, null, fence.length + 1);
+                }, 0);
+              });
+              return;
+            }
+            // If caret is at or after the end of the closing fence line, exit block and start new paragraph below.
+            var lastLineStart = text.lastIndexOf('\n') + 1;
+            var lastLine = text.slice(lastLineStart);
+            var atEndOfLastLine = offset >= lastLineStart + lastLine.length;
+            if (/```[ \t]*$/.test(lastLine) && atEndOfLastLine) {
+              e.preventDefault();
+              e.stopPropagation();
+              blocks[index].raw = text;
+              tab.content = blocksToContent(blocks);
+              currentTabRef.content = tab.content;
+              currentBlocks = blocks;
+              saveToFile(tab);
+              var newBlock = { raw: '', type: 'paragraph' };
+              blocks.splice(index + 1, 0, newBlock);
+              tab.content = blocksToContent(blocks);
+              currentTabRef.content = tab.content;
+              currentBlocks = blocks;
+              saveToFile(tab);
+              requestAnimationFrame(function () {
+                showTabContent(tab, currentBlocks);
+                setTimeout(function () {
+                  var newBlockEl = contentEl.querySelector('.md-block[data-block-index="' + (index + 1) + '"]');
+                  if (!newBlockEl) return;
+                  startInlineEdit(newBlockEl, index + 1, currentBlocks, tab, null);
+                }, 0);
+              });
+              return;
+            }
+            // Otherwise let Enter behave as a normal newline inside the code block.
+            return;
+          }
+
+          // Detect ``` or ```lang on an otherwise empty block (still a paragraph) and turn it into a fenced code block.
+          var beforeCursor = text.slice(0, offset);
+          var afterCursor = text.slice(offset);
+          var lineStart = beforeCursor.lastIndexOf('\n') + 1;
+          var currentLine = beforeCursor.slice(lineStart);
+          var fenceMatch = currentLine.match(/^```(\w+)?$/);
+          var hasOnlyFenceBefore =
+            text.slice(0, lineStart).trim() === '' && afterCursor.trim() === '';
+          if (fenceMatch && hasOnlyFenceBefore) {
+            e.preventDefault();
+            e.stopPropagation();
+            var lang = fenceMatch[1] || '';
+            var fence = '```' + lang;
+            var rawCodeBlock = fence + '\n\n```';
+            blocks[index].raw = rawCodeBlock;
+            blocks[index].type = 'code';
+            delete blocks[index].depth;
+            tab.content = blocksToContent(blocks);
+            currentTabRef.content = tab.content;
+            currentBlocks = blocks;
+            saveToFile(tab);
+            requestAnimationFrame(function () {
+              showTabContent(tab, currentBlocks);
+              setTimeout(function () {
+                var codeBlockEl = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+                if (!codeBlockEl) return;
+                // Place caret on the empty line between opening and closing fences.
+                startInlineEdit(codeBlockEl, index, currentBlocks, tab, null, fence.length + 1);
+              }, 0);
+            });
+            return;
+          }
+        }
+        if (e.key === 'Enter' && !blockEl.classList.contains('md-block-code')) {
+          dbg('editable keydown Enter: index=', index);
+          e.preventDefault();
+          syncBlockType();
+          var text2 = getEditableText();
+          var offset2 = Math.max(0, Math.min(getCaretOffset(editable), text2.length));
+          var beforeCursor2 = text2.slice(0, offset2);
+          var afterCursor2 = text2.slice(offset2);
+          var isList = blockEl.classList.contains('md-block-list');
+          var prefix = isList ? (listPrefix != null ? listPrefix : getListPrefix(blocks[index].raw)) : null;
+          if (isList && prefix && text2.trim() === '') {
+            blocks.splice(index, 1);
+            tab.content = blocksToContent(blocks);
+            currentTabRef.content = tab.content;
+            currentBlocks = blocks;
+            saveToFile(tab);
+            showTabContent(tab);
+            setTimeout(function () {
+              var nextEl = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+              if (nextEl) startInlineEdit(nextEl, index, currentBlocks, tab, null);
+            }, 10);
+            return;
+          }
+          if (prefix) {
+            blocks[index].raw = prefix + beforeCursor2;
+            var newBlock = { raw: prefix + afterCursor2, type: 'list' };
+            blocks.splice(index + 1, 0, newBlock);
+          } else {
+            blocks[index].raw = typeof beforeCursor2 === 'string' ? beforeCursor2 : String(beforeCursor2 || '');
+            var newBlock = { raw: typeof afterCursor2 === 'string' ? afterCursor2 : String(afterCursor2 || ''), type: 'paragraph' };
+            blocks.splice(index + 1, 0, newBlock);
+          }
+          tab.content = blocksToContent(blocks);
+          currentTabRef.content = tab.content;
+          currentBlocks = blocks;
+          saveToFile(tab);
+          requestAnimationFrame(function () {
+            showTabContent(tab, blocks);
+            setTimeout(function () {
+              var newBlockEl = contentEl.querySelector('.md-block[data-block-index="' + (index + 1) + '"]');
+              if (newBlockEl) {
+                startInlineEdit(newBlockEl, index + 1, currentBlocks, tab, null);
+                var edit2 = newBlockEl.querySelector('.inline-edit');
+                if (edit2) {
+                  edit2.focus();
+                  setCaretPosition(edit2, 0);
+                  setTimeout(function () {
+                    if (document.activeElement !== edit2) {
+                      edit2.focus();
+                      setCaretPosition(edit2, 0);
+                    }
+                  }, 0);
+                }
+              }
+            }, 0);
+          });
+        }
       });
     }
 
-    function showTabContent(tab) {
+    function showTabContent(tab, preferredBlocks) {
       if (!tab) return;
-      if (tab.content == null) {
-        contentEl.className = 'content';
-        contentEl.innerHTML = '<div class="rendered"><div class="error">Content not loaded.</div></div>';
-        filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title;
-        return;
-      }
-      if (!tab.path) {
-        contentEl.className = 'content';
-        contentEl.innerHTML = '<div class="rendered">' + marked.parse(tab.content) + '</div>';
-        filenameEl.textContent = tab.title;
-        return;
-      }
-      var blocks = getBlocks(tab.content);
-      currentBlocks = blocks;
-      currentTabRef = tab;
-      if (blocks.length === 0) {
-        contentEl.className = 'content read-mode';
-        contentEl.innerHTML = '<div class="rendered"><div class="md-block md-block-empty" data-block-index="0">' + marked.parse('\n') + '</div></div>';
-        currentBlocks = [{ raw: '', type: 'paragraph' }];
-      } else {
-        var html = '<div class="rendered">';
-        for (var i = 0; i < blocks.length; i++) {
-          var b = blocks[i];
-          var raw = typeof b === 'string' ? b : b.raw;
-          var type = typeof b === 'string' ? 'paragraph' : (b.type || 'paragraph');
-          var depth = typeof b === 'object' && b.depth;
-          var typeClass = 'md-block-' + escapeHtml(type) + (type === 'heading' && depth ? ' md-block-heading-' + depth : '');
-          html += '<div class="md-block ' + typeClass + '" data-block-index="' + i + '">' + marked.parse(raw) + '</div>';
+      _replacingContent = true;
+      try {
+        if (tab.content == null && !tab.path) {
+          contentEl.className = 'content';
+          contentEl.innerHTML = '<div class="rendered"><div class="error">Content not loaded.</div></div>';
+          filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title;
+          return;
         }
-        html += '</div>';
-        contentEl.className = 'content read-mode';
-        contentEl.innerHTML = html;
-      }
-      filenameEl.textContent = getTabTitle(tab.path);
+        if (!tab.path) {
+          contentEl.className = 'content';
+          contentEl.innerHTML = '<div class="rendered">' + marked.parse(tab.content || '') + '</div>';
+          filenameEl.textContent = tab.title;
+          return;
+        }
+        var blocks;
+        if (preferredBlocks && preferredBlocks.length >= 0) {
+          blocks = preferredBlocks;
+          tab.content = blocksToContent(blocks);
+          dbg('showTabContent: using preferredBlocks length=', blocks.length);
+        } else {
+          var contentStr = (tab.content != null && tab.content !== undefined) ? String(tab.content) : '';
+          if (currentTabRef === tab && currentBlocks.length > 0 && blocksToContent(currentBlocks) === contentStr) {
+            blocks = currentBlocks;
+          } else {
+            blocks = getBlocks(contentStr);
+          }
+        }
+        currentBlocks = blocks;
+        currentTabRef = tab;
+        if (blocks.length === 0) {
+          contentEl.className = 'content read-mode';
+          contentEl.innerHTML = '<div class="rendered"><div class="md-block md-block-empty md-block-paragraph" data-block-index="0">' + marked.parse('\n') + '</div></div>';
+          currentBlocks = [{ raw: '', type: 'paragraph' }];
+        } else {
+          var html = '<div class="rendered">';
+          var i = 0;
+          while (i < blocks.length) {
+            var b = blocks[i];
+            var raw = blockRaw(b);
+            var type = typeof b === 'string' ? 'paragraph' : (b.type || 'paragraph');
+            if (type === 'list') {
+              var prefix = getListPrefix(raw);
+              var listTag = isOrderedListPrefix(prefix) ? 'ol' : 'ul';
+              var listHtml = '<' + listTag + ' class="md-list-container">';
+              while (i < blocks.length) {
+                var lb = blocks[i];
+                var lraw = blockRaw(lb);
+                var ltype = typeof lb === 'string' ? 'paragraph' : (lb.type || 'paragraph');
+                if (ltype !== 'list') break;
+                var lprefix = getListPrefix(lraw);
+                if (isOrderedListPrefix(lprefix) !== isOrderedListPrefix(prefix)) break;
+                listHtml += '<li class="md-block md-block-list" data-block-index="' + i + '">' + getListItemDisplayHtml(lraw) + '</li>';
+                i++;
+              }
+              listHtml += '</' + listTag + '>';
+              html += listHtml;
+              continue;
+            }
+            var depth = typeof b === 'object' && b.depth;
+            var typeClass = 'md-block-' + escapeHtml(type) + (type === 'heading' && depth ? ' md-block-heading-' + depth : '');
+            html += '<div class="md-block ' + typeClass + '" data-block-index="' + i + '">' + marked.parse(raw) + '</div>';
+            i++;
+          }
+          html += '</div>';
+          contentEl.className = 'content read-mode';
+          contentEl.innerHTML = html;
+        }
+        filenameEl.textContent = getTabTitle(tab.path);
 
-      contentEl.querySelectorAll('.md-block').forEach(function (blockEl) {
-        blockEl.addEventListener('click', function (e) {
-          if (e.target.classList && e.target.classList.contains('inline-edit')) return;
-          var idx = parseInt(blockEl.getAttribute('data-block-index'), 10);
-          if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
-          startInlineEdit(blockEl, idx, currentBlocks, tab, e);
+        contentEl.querySelectorAll('.md-block').forEach(function (blockEl) {
+          blockEl.addEventListener('click', function (e) {
+            if (e.target.classList && e.target.classList.contains('inline-edit')) return;
+            var idx = parseInt(blockEl.getAttribute('data-block-index'), 10);
+            if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
+            startInlineEdit(blockEl, idx, currentBlocks, tab, e);
+          });
         });
-      });
+        // Click anywhere in content area (including padding/empty space) but not on a block → new paragraph
+        contentEl.onclick = function (e) {
+          if (e.target.closest('.md-block')) return;
+          if (!currentTabRef || !currentBlocks) return;
+          if (!contentEl.querySelector('.rendered')) return;
+          var blocks = currentBlocks.slice();
+          var newIndex = blocks.length;
+          blocks.push({ raw: '', type: 'paragraph' });
+          tab.content = blocksToContent(blocks);
+          currentTabRef.content = tab.content;
+          currentBlocks = blocks;
+          saveToFile(tab);
+          requestAnimationFrame(function () {
+            showTabContent(tab, currentBlocks);
+            setTimeout(function () {
+              var newBlockEl = contentEl.querySelector('.md-block[data-block-index="' + newIndex + '"]');
+              if (!newBlockEl) return;
+              startInlineEdit(newBlockEl, newIndex, currentBlocks, tab, null);
+            }, 0);
+          });
+        };
+        var isEmptyFile = currentBlocks.length === 1 && (currentBlocks[0].raw === '' || !currentBlocks[0].raw);
+        if (isEmptyFile) {
+          var firstBlock = contentEl.querySelector('.md-block[data-block-index="0"]');
+          if (firstBlock) {
+            setTimeout(function () { startInlineEdit(firstBlock, 0, currentBlocks, tab, null); }, 0);
+          }
+        }
+      } finally {
+        _replacingContent = false;
+      }
     }
 
     function showWelcomeOrEmpty() {
@@ -1108,6 +1983,7 @@
 
     function setTreeRoot(rootPath, initialFilePath) {
       treeRoot = rootPath;
+      if (newFileBtn) newFileBtn.disabled = !rootPath;
       loadedChildren.clear();
       treeEl.innerHTML = '';
       if (!rootPath) return;
@@ -1115,6 +1991,7 @@
       const rootLi = document.createElement('li');
       rootLi.className = 'tree-item folder';
       rootLi.dataset.path = rootPath;
+      rootLi.dataset.isDir = '1';
       rootLi.innerHTML = '<div class="tree-item-row"><span class="expand">▶</span><span class="icon">' + folderIcon + '</span><span class="name">' + escapeHtml(rootName) + '</span></div>';
       rootLi.classList.add('expanded');
       treeEl.appendChild(rootLi);
@@ -1211,6 +2088,49 @@
       selectedPath = path;
     }
 
+    function getTreeItemByPath(path) {
+      var found = null;
+      treeEl.querySelectorAll('.tree-item').forEach(function (el) {
+        if (el.dataset.path === path) found = el;
+      });
+      return found;
+    }
+
+    function refreshFolder(folderPath) {
+      var a = getApi();
+      if (!a) return;
+      a.list_dir(folderPath).then(function (res) {
+        var entries = res.entries || [];
+        loadedChildren.set(folderPath, entries);
+        var parentLi = getTreeItemByPath(folderPath);
+        if (parentLi) renderTreeChildren(parentLi, entries);
+      }).catch(function () {});
+    }
+
+    var contextMenuFolderPath = null;
+    var contextMenuFilePath = null;
+    function createInFolder(folderPath) {
+      var name = prompt('Enter filename (e.g. My Note.md):', 'Untitled.md');
+      if (name == null || !name.trim()) return;
+      var a = getApi();
+      if (!a || typeof a.create_file !== 'function') {
+        showError('Create file not available.');
+        return;
+      }
+      a.create_file(folderPath, name.trim()).then(function (data) {
+        if (data && data.error) {
+          showError(data.error);
+          return;
+        }
+        if (data && data.path) {
+          refreshFolder(folderPath);
+          openFile(data.path);
+        }
+      }).catch(function (err) {
+        showError(err && (err.message || err) || 'Failed to create file.');
+      });
+    }
+
     function onOpenFile() {
       openMenu.classList.remove('visible');
       var a = getApi();
@@ -1255,6 +2175,197 @@
       }).catch(showError);
     }
 
+    if (newFileBtn) newFileBtn.disabled = true;
+    newFileBtn.addEventListener('click', function () {
+      if (!treeRoot || newFileBtn.disabled) return;
+      createInFolder(treeRoot);
+    });
+    if (treeWrap) {
+      treeWrap.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        var item = e.target.closest('.tree-item');
+        if (item) {
+          var isDir = item.dataset.isDir === '1';
+          var path = item.dataset.path || '';
+          if (isDir) {
+            contextMenuFolderPath = path;
+            contextMenuFilePath = null;
+          } else {
+            contextMenuFolderPath = path.replace(/[/\\][^/\\]+$/, '') || path;
+            contextMenuFilePath = path;
+          }
+          newFileHereBtn.style.display = 'block';
+          deleteFileBtn.style.display = isDir ? 'none' : 'block';
+        } else {
+          contextMenuFolderPath = treeRoot;
+          contextMenuFilePath = null;
+          newFileHereBtn.style.display = treeRoot ? 'block' : 'none';
+          deleteFileBtn.style.display = 'none';
+        }
+        treeContextMenu.classList.add('visible');
+        treeContextMenu.style.left = e.clientX + 'px';
+        treeContextMenu.style.top = e.clientY + 'px';
+      });
+    }
+    newFileHereBtn.addEventListener('click', function () {
+      treeContextMenu.classList.remove('visible');
+      if (contextMenuFolderPath) {
+        createInFolder(contextMenuFolderPath);
+        contextMenuFolderPath = null;
+      }
+    });
+    deleteFileBtn.addEventListener('click', function () {
+      treeContextMenu.classList.remove('visible');
+      if (!contextMenuFilePath) return;
+      var path = contextMenuFilePath;
+      contextMenuFilePath = null;
+      if (!confirm('Delete this file? This cannot be undone.')) return;
+      var a = getApi();
+      if (!a || typeof a.delete_file !== 'function') {
+        showError('Delete not available.');
+        return;
+      }
+      a.delete_file(path).then(function (res) {
+        if (res && res.error) {
+          showError(res.error);
+          return;
+        }
+        var parentPath = path.replace(/[/\\][^/\\]+$/, '').replace(/^$/, path);
+        if (parentPath !== path) refreshFolder(parentPath);
+        closeTab(path);
+      }).catch(function (err) {
+        showError(err && (err.message || err) || 'Failed to delete file.');
+      });
+    });
+    document.addEventListener('click', function () {
+      openMenu.classList.remove('visible');
+      treeContextMenu.classList.remove('visible');
+    });
+
+    function handleEnterInBlock(editable, blockEl, index) {
+      var tab = getActiveTab() || currentTabRef;
+      if (!tab || !currentBlocks.length || index < 0 || index >= currentBlocks.length) { dbg('handleEnterInBlock: bail early', !!tab, currentBlocks.length, index); return; }
+      if (blockEl.classList.contains('md-block-code')) return;
+      var blocks = currentBlocks;
+      var text = (editable.innerText != null ? editable.innerText : editable.textContent || '').replace(/\u00a0/g, ' ');
+      var offset = Math.max(0, Math.min(getCaretOffset(editable), text.length));
+      var beforeCursor = text.slice(0, offset);
+      var afterCursor = text.slice(offset);
+      dbg('handleEnterInBlock: text=' + JSON.stringify(text) + ' offset=' + offset + ' before=' + JSON.stringify(beforeCursor) + ' after=' + JSON.stringify(afterCursor));
+      var isList = blockEl.classList.contains('md-block-list');
+      var prefix = isList ? getListPrefix(blocks[index].raw) : null;
+      if (isList && prefix && text.trim() === '') {
+        blocks.splice(index, 1);
+        tab.content = blocksToContent(blocks);
+        currentTabRef.content = tab.content;
+        currentBlocks = blocks;
+        showTabContent(tab);
+        setTimeout(function () {
+          var nextEl = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+          if (nextEl) startInlineEdit(nextEl, index, currentBlocks, tab, null);
+        }, 10);
+        return;
+      }
+      if (prefix) {
+        blocks[index].raw = prefix + beforeCursor;
+        var newBlock = { raw: prefix + afterCursor, type: 'list' };
+        blocks.splice(index + 1, 0, newBlock);
+      } else {
+        blocks[index].raw = typeof beforeCursor === 'string' ? beforeCursor : String(beforeCursor || '');
+        var newBlock = { raw: typeof afterCursor === 'string' ? afterCursor : String(afterCursor || ''), type: 'paragraph' };
+        blocks.splice(index + 1, 0, newBlock);
+      }
+      tab.content = blocksToContent(blocks);
+      currentTabRef.content = tab.content;
+      currentBlocks = blocks;
+      dbg('handleEnterInBlock: blocks.length=', blocks.length, 'tab.content=' + JSON.stringify(tab.content));
+      requestAnimationFrame(function () {
+        try {
+          dbg('rAF1: calling showTabContent with', blocks.length, 'blocks');
+          showTabContent(tab, blocks);
+          dbg('rAF1: showTabContent returned');
+        } catch (err1) {
+          dbg('rAF1 ERROR:', String(err1 && (err1.message || err1)));
+          return;
+        }
+        setTimeout(function () {
+          try {
+          var allBlocks = contentEl.querySelectorAll('.md-block');
+          var indices = [];
+          for (var i = 0; i < allBlocks.length; i++) indices.push(allBlocks[i].getAttribute('data-block-index'));
+          dbg('rAF1: after showTabContent, .md-block count=', allBlocks.length, 'indices=', indices.join(','));
+          } catch (e) { dbg('rAF1 count ERROR:', String(e && (e.message || e))); }
+          setTimeout(function () {
+            try {
+              dbg('rAF2/setTimeout: start');
+              var newBlockEl = contentEl.querySelector('.md-block[data-block-index="' + (index + 1) + '"]');
+              dbg('rAF2/setTimeout: newBlockEl found=', !!newBlockEl, 'query index=', index + 1);
+              if (newBlockEl) {
+                startInlineEdit(newBlockEl, index + 1, currentBlocks, tab, null);
+                var edit = newBlockEl.querySelector('.inline-edit');
+                dbg('rAF2/setTimeout: .inline-edit found=', !!edit);
+                if (edit) {
+                  edit.focus();
+                  setCaretPosition(edit, 0);
+                  dbg('rAF2/setTimeout: after focus activeElement=', document.activeElement ? document.activeElement.tagName + (document.activeElement === edit ? ' (edit)' : '') : 'null');
+                  setTimeout(function () {
+                    if (document.activeElement !== edit) {
+                      dbg('setTimeout(0): focus was lost, re-focusing. activeElement=', document.activeElement ? document.activeElement.tagName : 'null');
+                      edit.focus();
+                      setCaretPosition(edit, 0);
+                    } else {
+                      dbg('setTimeout(0): focus still on edit OK');
+                    }
+                  }, 0);
+                }
+              } else {
+                dbg('rAF2/setTimeout: no newBlockEl - cannot open new block');
+              }
+            } catch (err2) {
+              dbg('rAF2/setTimeout ERROR:', String(err2 && (err2.message || err2)));
+            }
+          }, 0);
+        }, 0);
+      });
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.keyCode !== 13) return;
+      var active = document.activeElement;
+      dbg('Enter keydown capture | activeElement:', active ? (active.tagName + (active.className ? '.' + String(active.className).replace(/\s+/g, '.') : '')) : 'null', 'inContent:', active ? contentEl.contains(active) : false);
+      if (!active || !contentEl.contains(active)) return;
+      var editable = active.classList && active.classList.contains('inline-edit') ? active : active.closest('.inline-edit');
+      if (!editable) { dbg('Enter: no .inline-edit found'); return; }
+      var blockEl = editable.closest('.md-block');
+      if (!blockEl) { dbg('Enter: no .md-block found'); return; }
+      if (blockEl.classList.contains('md-block-code')) return;
+      var index = parseInt(blockEl.getAttribute('data-block-index'), 10);
+      if (isNaN(index) || index < 0) { dbg('Enter: bad index', index); return; }
+      dbg('Enter: handling in block index', index);
+      e.preventDefault();
+      e.stopPropagation();
+      handleEnterInBlock(editable, blockEl, index);
+    }, true);
+
+    document.addEventListener('keydown', function (e) {
+      if (!DEBUG_ENTER) return;
+      var t = e.target;
+      if (t && contentEl.contains(t)) {
+        var isEdit = t.classList && t.classList.contains('inline-edit') ? 'YES' : (t.closest && t.closest('.inline-edit') ? 'child' : 'NO');
+        var msg = 'key=' + (e.key || e.code) + ' target=' + (t.tagName + (t.className ? '.' + String(t.className).slice(0, 30) : '')) + ' inline-edit=' + isEdit + ' active=' + (document.activeElement === t ? 'target' : (document.activeElement ? document.activeElement.tagName : 'null'));
+        console.log('[MD key]', msg);
+        var el = document.getElementById('debugPanel');
+        if (el) {
+          var line = document.createElement('div');
+          line.className = 'debug-line debug-key';
+          line.textContent = '[MD key] ' + msg;
+          el.appendChild(line);
+          while (el.children.length > DEBUG_MAX_LINES + 1) el.removeChild(el.children[1]);
+          el.scrollTop = el.scrollHeight;
+        }
+      }
+    }, true);
+
     openBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       openMenu.classList.toggle('visible');
@@ -1264,9 +2375,6 @@
         if (this.dataset.action === 'file') onOpenFile();
         else onOpenFolder();
       });
-    });
-    document.addEventListener('click', function () {
-      openMenu.classList.remove('visible');
     });
 
     sidebar.querySelector('.sidebar-toggle').addEventListener('click', function () {
@@ -1293,16 +2401,46 @@
       applyTheme(this.value);
     });
 
-    modeReadBtn.addEventListener('click', function () {
+    var focusBtn = document.getElementById('focusBtn');
+    var focusExitBtn = document.getElementById('focusExitBtn');
+    function setFocusMode(on) {
+      document.body.setAttribute('data-focus-mode', on ? 'true' : 'false');
+      var a = getApi();
+      if (a && typeof a.toggle_fullscreen === 'function') {
+        a.toggle_fullscreen();
+      }
+    }
+    function isFocusMode() {
+      return document.body.getAttribute('data-focus-mode') === 'true';
+    }
+    if (focusBtn) {
+      focusBtn.addEventListener('click', function () {
+        setFocusMode(true);
+      });
+    }
+    if (focusExitBtn) {
+      focusExitBtn.addEventListener('click', function () {
+        setFocusMode(false);
+      });
+    }
+
+    var modeReadBtn = document.getElementById('modeReadBtn');
+    var modeEditBtn = document.getElementById('modeEditBtn');
+    if (modeReadBtn) modeReadBtn.addEventListener('click', function () {
       var tab = getActiveTab();
       if (tab) switchToReadMode(tab);
     });
-    modeEditBtn.addEventListener('click', function () {
+    if (modeEditBtn) modeEditBtn.addEventListener('click', function () {
       var tab = getActiveTab();
       if (tab && tab.path) switchToEditMode(tab);
     });
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && isFocusMode()) {
+        setFocusMode(false);
+        e.preventDefault();
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         var tab = getActiveTab();
         if (tab && tab.path) {
@@ -1310,6 +2448,10 @@
           saveToFile(tab);
         }
       }
+    });
+
+    window.addEventListener('beforeunload', function () {
+      flushActiveEditAndSave();
     });
 
     (function initTheme() {

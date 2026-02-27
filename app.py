@@ -151,6 +151,46 @@ class Api:
         except Exception as e:
             return {"path": path, "error": str(e)}
 
+    def create_file(self, folder_path, filename):
+        """Create a new markdown file in folder_path. Returns { path, content, error? }."""
+        if not folder_path or not os.path.isdir(folder_path) or not os.path.isabs(folder_path):
+            return {"path": None, "content": None, "error": "Invalid or missing folder."}
+        filename = (filename or "").strip() or "Untitled.md"
+        if not filename.lower().endswith(MD_EXTENSIONS):
+            filename = filename.rstrip(".") + ".md"
+        filename = os.path.basename(filename)
+        if not filename:
+            return {"path": None, "content": None, "error": "Invalid filename."}
+        path = os.path.join(folder_path, filename)
+        if os.path.isfile(path):
+            base, ext = os.path.splitext(filename)
+            for n in range(1, 1000):
+                path = os.path.join(folder_path, f"{base} {n}{ext}")
+                if not os.path.isfile(path):
+                    filename = os.path.basename(path)
+                    break
+            else:
+                return {"path": None, "content": None, "error": "Could not generate unique filename."}
+        content = ""
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(content)
+            return {"path": path, "content": content}
+        except Exception as e:
+            return {"path": path, "content": None, "error": str(e)}
+
+    def delete_file(self, path):
+        """Delete a markdown file. Returns { success, error? }."""
+        if not path or not os.path.isfile(path):
+            return {"success": False, "error": "File not found."}
+        if not path.lower().endswith(MD_EXTENSIONS):
+            return {"success": False, "error": "Not a markdown file."}
+        try:
+            os.remove(path)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def get_welcome(self):
         """Return the bundled Welcome.md content for the default startup view. Returns None if not found."""
         path = os.path.join(BASE_DIR, "Welcome.md")
@@ -162,10 +202,23 @@ class Api:
         except Exception:
             return None
 
+    def toggle_fullscreen(self):
+        """Toggle native window fullscreen (hides title bar and OS menu). Used by focus mode."""
+        try:
+            self._window.toggle_fullscreen()
+        except Exception:
+            pass
+
 
 def main():
     if os.name == "nt":
         sys.stderr = StderrFilter(sys.__stderr__)
+
+    # DevTools: set PYWEBVIEW_DEBUG=1 or run with --debug. Port must be set before create_window.
+    debug = os.environ.get("PYWEBVIEW_DEBUG", "").strip().lower() in ("1", "true", "yes") or "--debug" in sys.argv
+    if debug:
+        webview.settings["REMOTE_DEBUGGING_PORT"] = 9222
+        webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
 
     api = Api(None)
     window = webview.create_window(
@@ -194,7 +247,11 @@ def main():
     except Exception:
         pass
 
-    start_kw = {"debug": False}
+    start_kw = {"debug": debug}
+    if debug:
+        print("DevTools: In Edge or Chrome open edge://inspect or chrome://inspect")
+        print("          Click 'Configure' under 'Discover network targets' and add: localhost:9222")
+        print("          Then the app should appear there; click 'Inspect' to open DevTools.")
     if os.name == "nt":
         start_kw["gui"] = "edgechromium"
     webview.start(**start_kw)
