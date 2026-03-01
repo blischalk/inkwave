@@ -1512,6 +1512,77 @@ window.addEventListener('beforeunload', function () {
   flushActiveEditAndSave();
 });
 
+// ── Drag-and-drop to open markdown files ─────────────────────────────────────
+(function () {
+  var dropOverlay = document.getElementById('dropOverlay');
+
+  function isMarkdown(name) {
+    return /\.(md|markdown)$/i.test(name);
+  }
+
+  function openDroppedFile(file) {
+    // Prefer the native path (available in pywebview's WKWebView) so saving
+    // works normally.  Fall back to FileReader for content-only viewing.
+    var path = file.path || null;
+    if (path && isMarkdown(path)) {
+      var a = getApi();
+      if (a) {
+        a.read_file(path).then(function (data) {
+          if (data && data.content != null) {
+            addTab({ path: data.path, title: getTabTitle(data.path), content: data.content });
+            // Set the file's parent directory as the tree root if no folder is open yet.
+            if (!treeRoot) {
+              var dir = path.replace(/[/\\][^/\\]+$/, '');
+              setTreeRoot(dir, null);
+            }
+            selectFile(data.path);
+          } else {
+            showError((data && data.error) || 'Could not read file.');
+          }
+        }).catch(showError);
+        return;
+      }
+    }
+    // Fallback: read content via FileReader (no save path available).
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      addTab({ path: null, title: file.name, content: e.target.result });
+    };
+    reader.onerror = function () { showError('Could not read dropped file.'); };
+    reader.readAsText(file);
+  }
+
+  document.addEventListener('dragenter', function (e) {
+    var types = e.dataTransfer && e.dataTransfer.types;
+    if (types && (Array.prototype.indexOf.call(types, 'Files') >= 0 ||
+                  Array.prototype.indexOf.call(types, 'application/x-moz-file') >= 0)) {
+      dropOverlay.classList.add('active');
+    }
+  });
+
+  document.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  document.addEventListener('dragleave', function (e) {
+    // Only hide when leaving the window entirely.
+    if (!e.relatedTarget) dropOverlay.classList.remove('active');
+  });
+
+  document.addEventListener('drop', function (e) {
+    e.preventDefault();
+    dropOverlay.classList.remove('active');
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    for (var i = 0; i < files.length; i++) {
+      if (isMarkdown(files[i].name)) {
+        openDroppedFile(files[i]);
+      }
+    }
+  });
+})();
+
 applyTheme('obsidianite');
 
 function showFallbackContent() {

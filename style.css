@@ -655,6 +655,37 @@ body[data-debug="true"] .debug-panel { display: block; }
 .debug-header { color: #aaa; margin-bottom: 4px; }
 .debug-key { color: #ff8; }
 
+/* ── Drag-and-drop overlay ───────────────────────────────────────────────── */
+.drop-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.drop-overlay.active {
+  display: flex;
+}
+.drop-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 64px;
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 500;
+  background: var(--toolbar-bg);
+  opacity: 0.95;
+}
+
 /* Theme: Obsidianite (default – dark, neon-inspired, from Obsidian) */
 body[data-theme="obsidianite"],
 body:not([data-theme]) {
