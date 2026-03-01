@@ -1,2 +1,8 @@
 .env/
 settings.json
+
+# PyInstaller build artifacts
+build/
+dist/
+__pycache__/
+*.pyc

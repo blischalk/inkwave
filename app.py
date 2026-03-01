@@ -15,7 +15,19 @@ if os.name == "nt":
 import webview
 
 # Directory where this script lives (for loading index.html)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# When frozen by PyInstaller, data files are in sys._MEIPASS (temp extraction dir).
+# When running from source, they're alongside this script.
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+
+# User data dir for settings — must be writable and persistent across runs.
+# _MEIPASS is a temp dir that's wiped on exit, so we can't write settings there.
+def _user_data_dir():
+    if sys.platform == 'darwin':
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Inkwave')
+    elif os.name == 'nt':
+        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Inkwave')
+    else:
+        return os.path.join(os.path.expanduser('~'), '.inkwave')
 
 # File dialog types (new API + fallbacks for older pywebview)
 _file_dialog = getattr(webview, "FileDialog", None)
@@ -210,8 +222,12 @@ class Api:
             pass
 
     def _settings_path(self):
-        path = os.path.join(BASE_DIR, "settings.json")
-        return path
+        if getattr(sys, 'frozen', False):
+            base = _user_data_dir()
+            os.makedirs(base, exist_ok=True)
+        else:
+            base = BASE_DIR
+        return os.path.join(base, "settings.json")
 
     def load_settings(self):
         """Load all persisted settings. Returns a dict (empty if none saved)."""
