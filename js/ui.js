@@ -6,6 +6,7 @@ import {
   treeRoot,
   setActiveTabId,
   currentTabRef, currentBlocks, setCurrentBlocks, onShowTabContent,
+  rawMode, setRawMode, rawModeBtn,
 } from "./state.js";
 import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
@@ -275,6 +276,17 @@ if (modeEditBtn)
     const tab = getActiveTab();
     if (tab && tab.path) switchToEditMode(tab);
   });
+
+// ── Raw mode toggle ───────────────────────────────────────────────────────────
+if (rawModeBtn) {
+  rawModeBtn.addEventListener("click", () => {
+    const newMode = !rawMode;
+    setRawMode(newMode);
+    rawModeBtn.setAttribute("aria-pressed", newMode ? "true" : "false");
+    const tab = getActiveTab();
+    if (tab && onShowTabContent) onShowTabContent(tab);
+  });
+}
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {

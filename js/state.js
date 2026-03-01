@@ -27,6 +27,9 @@ export function setSelectedPath(v) { selectedPath = v; }
 export let welcomeContent = null;
 export function setWelcomeContent(v) { welcomeContent = v; }
 
+export let rawMode = false;
+export function setRawMode(v) { rawMode = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content");
 export const filenameEl      = document.getElementById("filename");
@@ -42,6 +45,7 @@ export const deleteFileBtn   = document.getElementById("deleteFileBtn");
 export const tabBarEl        = document.getElementById("tabBar");
 export const themePicker     = document.getElementById("themePicker");
 export const copyBtn         = document.getElementById("copyBtn");
+export const rawModeBtn      = document.getElementById("rawModeBtn");
 export const focusBtn        = document.getElementById("focusBtn");
 export const focusExitBtn    = document.getElementById("focusExitBtn");
 export const loadedChildren  = new Map();

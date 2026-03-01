@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl,
-  currentBlocks, currentTabRef, welcomeContent, _replacingContent,
+  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode,
   setCurrentBlocks, setCurrentTabRef, setReplacingContent,
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
@@ -118,6 +118,32 @@ export function showTabContent(tab, preferredBlocks) {
   if (!tab) return;
   setReplacingContent(true);
   try {
+    // ── Raw mode: show the full file as an editable textarea ─────────────────
+    if (rawMode) {
+      const contentStr = tab.content != null ? String(tab.content) : "";
+      contentEl.className = "content raw-mode";
+      contentEl.onclick = null;
+      contentEl.innerHTML = "";
+      const textarea = document.createElement("textarea");
+      textarea.className = "raw-editor";
+      textarea.value = contentStr;
+      textarea.setAttribute("spellcheck", "false");
+      textarea.setAttribute("autocorrect", "off");
+      textarea.setAttribute("autocapitalize", "none");
+      contentEl.appendChild(textarea);
+      setCurrentTabRef(tab);
+      setCurrentBlocks(getBlocks(contentStr));
+      filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
+      textarea.addEventListener("input", () => {
+        tab.content = textarea.value;
+        currentTabRef.content = tab.content;
+        setCurrentBlocks(getBlocks(textarea.value));
+        saveToFile(tab);
+      });
+      textarea.focus();
+      return;
+    }
+
     if (tab.content == null && !tab.path) {
       contentEl.className = "content";
       contentEl.innerHTML =
