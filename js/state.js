@@ -41,6 +41,7 @@ export const treeWrap        = document.querySelector(".tree-wrap");
 export const deleteFileBtn   = document.getElementById("deleteFileBtn");
 export const tabBarEl        = document.getElementById("tabBar");
 export const themePicker     = document.getElementById("themePicker");
+export const copyBtn         = document.getElementById("copyBtn");
 export const focusBtn        = document.getElementById("focusBtn");
 export const focusExitBtn    = document.getElementById("focusExitBtn");
 export const loadedChildren  = new Map();

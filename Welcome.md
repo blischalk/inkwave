@@ -14,3 +14,4 @@ A simple desktop app for reading Markdown (`.md`) files in a clean, rendered vie
 Click **Open file or folder ▾** and select a markdown file or a folder that contains your notes or docs. The tree will list only directories and markdown files so you can navigate quickly.
 
 Enjoy reading.
+

@@ -15,7 +15,7 @@ a = Analysis(
     datas=[
         ('index.html', '.'),
         ('style.css',  '.'),
-        ('app.js',     '.'),
+        ('js',         'js'),
         ('Welcome.md', '.'),
     ],
     hiddenimports=['webview'],

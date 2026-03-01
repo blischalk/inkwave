@@ -39,9 +39,9 @@ There are no tests and no linting configuration.
 - `get_welcome()` — returns bundled `Welcome.md` content
 - `toggle_fullscreen()` — toggles native window fullscreen
 
-### Frontend (app.js)
+### Frontend (`js/`)
 
-`app.js` is a single vanilla JS file (~1500+ lines, no modules). Key concepts:
+The UI is vanilla JS modules under `js/`. Entry point is `js/main.js` (loaded by `index.html`). Import order: state → debug/api/utils/blocks/caret → tabs/fileio → renderer/editor → filetree/ui/init. Key concepts:
 
 - **Tabs**: each open file is a tab (`tabs` array, `activeTabId`). Tab state holds `path`, `blocks`, and edit state.
 - **Blocks**: content is parsed into an array of block objects (`getBlocks()`). Each block has `{type, raw}`. Types include `heading`, `paragraph`, `code`, `list-item`, `blockquote`, `hr`, `blank`.
@@ -64,8 +64,8 @@ All theming uses CSS custom properties (`--bg`, `--text`, `--accent`, `--toolbar
 | File | Purpose |
 |------|---------|
 | `app.py` | Python entry point; pywebview window creation; `Api` class for all file I/O |
-| `index.html` | App shell; loads CDN scripts (marked.js, highlight.js) and `app.js` |
-| `app.js` | All UI logic: tabs, block editing, file tree, theming, pywebview bridge |
+| `index.html` | App shell; loads CDN scripts (marked.js, highlight.js) and `js/main.js` |
+| `js/main.js` | Entry point; imports state, api, blocks, tabs, fileio, renderer, editor, filetree, ui, init |
 | `style.css` | All styles and theme definitions via CSS custom properties |
 | `Welcome.md` | Bundled welcome screen content, loaded by `get_welcome()` at startup |
 | `requirements.txt` | Single dependency: `pywebview>=4.0` |
@@ -73,5 +73,5 @@ All theming uses CSS custom properties (`--bg`, `--text`, `--accent`, `--toolbar
 ## Debugging
 
 - Press `Ctrl+Shift+D` in the running app to toggle the in-UI debug log panel.
-- The `dbg()` function in `app.js` logs to both console and the debug panel (only when `DEBUG_ENTER = true` or toggled).
+- The `dbg()` function in `js/debug.js` logs to both console and the debug panel (only when `DEBUG_ENTER = true` or toggled).
 - Remote DevTools: run with `--debug`, then open `edge://inspect` or `chrome://inspect` → Configure → `localhost:9222`.

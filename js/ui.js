@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl,
-  sidebar, openBtn, openMenu, newFileBtn,
+  sidebar, openBtn, openMenu, newFileBtn, copyBtn,
   treeContextMenu, newFileHereBtn, treeWrap, deleteFileBtn,
   themePicker, focusBtn, focusExitBtn,
   treeRoot,
@@ -46,6 +46,56 @@ if (focusBtn) {
 if (focusExitBtn) {
   focusExitBtn.addEventListener("click", () => { setFocusMode(false); });
 }
+
+// ── Copy selection ────────────────────────────────────────────────────────────
+function copySelectionToClipboard() {
+  const sel = document.getSelection();
+  const text = sel ? sel.toString().trim() : "";
+  if (!text) return false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+    return true;
+  }
+  return false;
+}
+
+if (copyBtn) {
+  copyBtn.addEventListener("click", () => {
+    if (copySelectionToClipboard()) {
+      const origTitle = copyBtn.getAttribute("title");
+      copyBtn.setAttribute("title", "Copied!");
+      copyBtn.setAttribute("aria-label", "Copied!");
+      setTimeout(() => {
+        copyBtn.setAttribute("title", origTitle || "Copy selection");
+        copyBtn.setAttribute("aria-label", origTitle || "Copy selection");
+      }, 1500);
+    }
+  });
+}
+
+document.addEventListener("copy", (e) => {
+  const sel = document.getSelection();
+  const text = sel ? sel.toString() : "";
+  if (text && e.clipboardData) {
+    e.clipboardData.setData("text/plain", text);
+    e.preventDefault();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "a" || (!e.metaKey && !e.ctrlKey)) return;
+  const activeInContent = contentEl && contentEl.contains(document.activeElement);
+  const sel = document.getSelection();
+  const selectionInContent = sel?.anchorNode && contentEl?.contains(sel.anchorNode);
+  if (!activeInContent && !selectionInContent) return;
+  const rendered = contentEl?.querySelector(".rendered");
+  if (!rendered) return;
+  e.preventDefault();
+  const range = document.createRange();
+  range.selectNodeContents(rendered);
+  sel.removeAllRanges();
+  sel.addRange(range);
+});
 
 // ── Open file / folder ────────────────────────────────────────────────────────
 function onOpenFile() {

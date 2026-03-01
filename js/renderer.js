@@ -109,9 +109,9 @@ export function showTabContent(tab, preferredBlocks) {
     }
     filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
 
-    // Wire click handlers — use callback to avoid circular import with editor.js
+    // Wire double-click to start edit (single-click + drag can select text for copy)
     contentEl.querySelectorAll(".md-block").forEach((blockEl) => {
-      blockEl.addEventListener("click", (e) => {
+      blockEl.addEventListener("dblclick", (e) => {
         if (e.target.classList && e.target.classList.contains("inline-edit"))
           return;
         const idx = parseInt(blockEl.getAttribute("data-block-index"), 10);
@@ -119,14 +119,12 @@ export function showTabContent(tab, preferredBlocks) {
         if (onStartInlineEdit) onStartInlineEdit(blockEl, idx, currentBlocks, tab, e);
       });
     });
-    // Ensure clicks anywhere inside a code block's <pre>/<code> trigger editing,
-    // since webkit may not bubble clicks from scrollable <pre> elements reliably.
     contentEl
       .querySelectorAll(".md-block-code")
       .forEach((codeBlockEl) => {
         const pre = codeBlockEl.querySelector("pre");
         if (!pre) return;
-        pre.addEventListener("click", (e) => {
+        pre.addEventListener("dblclick", (e) => {
           if (codeBlockEl.classList.contains("editing")) return;
           const idx = parseInt(codeBlockEl.getAttribute("data-block-index"), 10);
           if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
