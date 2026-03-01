@@ -30,6 +30,9 @@ export function setWelcomeContent(v) { welcomeContent = v; }
 export let rawMode = false;
 export function setRawMode(v) { rawMode = v; }
 
+export let vimMode = false;
+export function setVimMode(v) { vimMode = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content");
 export const filenameEl      = document.getElementById("filename");

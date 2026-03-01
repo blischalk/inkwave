@@ -1,9 +1,12 @@
 * { box-sizing: border-box; }
 
+html { height: 100%; }
+
 body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -26,6 +29,16 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--accent);
+}
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.logo-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 .btn {
   padding: 8px 16px;
@@ -188,6 +201,7 @@ body {
   display: flex;
   overflow: hidden;
   min-height: 0;
+  position: relative;
 }
 .sidebar {
   width: 260px;
@@ -401,6 +415,11 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
   padding: 24px 32px 48px;
   transition: padding 0.3s ease;
 }
+/* position:relative only in read/block mode — raw mode must stay static so
+   height:100% on .raw-editor resolves correctly against the scroll container. */
+.content.read-mode {
+  position: relative; /* anchor for .vim-fake-cursor (position:absolute) */
+}
 .content.read-mode .rendered,
 .content.read-mode .md-block {
   -webkit-user-select: text;
@@ -430,6 +449,87 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
 .btn-icon[aria-pressed="true"] {
   background: var(--accent);
   color: var(--btn-text);
+}
+/* ── Table of Contents panel ─────────────────────────────────────────────── */
+.toc-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--toolbar-bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 50;
+  transform: translateX(100%);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: none;
+}
+.toc-panel.visible {
+  transform: translateX(0);
+  box-shadow: -4px 0 16px rgba(0,0,0,0.25);
+}
+.toc-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.toc-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.toc-close-btn:hover { color: var(--text); background: var(--border); }
+.toc-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.toc-item {
+  display: block;
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.toc-item:hover { background: var(--code-bg); color: var(--accent); }
+.toc-item:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.toc-depth-1 { font-weight: 600; padding-left: 14px; }
+.toc-depth-2 { padding-left: 22px; }
+.toc-depth-3 { padding-left: 30px; color: var(--muted); }
+.toc-depth-4 { padding-left: 38px; color: var(--muted); font-size: 0.78rem; }
+.toc-depth-5,
+.toc-depth-6 { padding-left: 46px; color: var(--muted); font-size: 0.78rem; }
+.toc-empty {
+  padding: 16px 14px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
 }
 .content.empty {
   display: flex;
@@ -761,6 +861,141 @@ body[data-debug="true"] .debug-panel { display: block; }
   opacity: 0.95;
 }
 
+/* ── Settings modal ──────────────────────────────────────────────────────── */
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-modal[hidden] { display: none; }
+.settings-panel {
+  background: var(--toolbar-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+}
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-close-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.settings-close-btn:hover { color: var(--text); background: var(--border); }
+.settings-body {
+  padding: 12px 0;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.settings-row:hover { background: var(--code-bg); }
+.settings-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.settings-row-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.settings-row-desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.settings-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+.settings-toggle::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: left 0.2s ease;
+}
+.settings-toggle:checked { background: var(--accent); }
+.settings-toggle:checked::after { left: 21px; }
+
+/* ── Vim mode status bar ─────────────────────────────────────────────────── */
+.vim-status {
+  flex-shrink: 0;
+  padding: 3px 12px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: var(--toolbar-bg);
+  border-top: 1px solid var(--border);
+  min-height: 20px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.vim-status:empty { border-top-color: transparent; background: transparent; }
+.raw-editor.vim-normal { caret-color: transparent; }
+/* In vim normal mode, give the content pane a subtle focus ring so the user knows it's active */
+#content[tabindex]:focus { outline: none; }
+/* Fake blinking cursor for vim block-nav mode (normal divs don't show a native caret).
+   position:absolute inside #content keeps coordinates in the same space as
+   getBoundingClientRect() converted to content-relative, avoiding any
+   fixed/viewport mismatch in WKWebView. */
+.vim-fake-cursor {
+  display: none;
+  position: absolute;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 9999;
+  animation: vim-cursor-blink 1.2s step-start infinite;
+}
+@keyframes vim-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 /* Theme: Obsidianite (default – dark, neon-inspired, from Obsidian) */
 body[data-theme="obsidianite"],
 body:not([data-theme]) {
@@ -1013,6 +1248,53 @@ body[data-theme="lavender"] {
   --error-bg: rgba(192, 64, 64, 0.1);
   --bold-fallback: #7c5cbf;
   --bold-gradient: linear-gradient(105deg, #5e4d7a, #7c5cbf, #5b7c99);
+}
+
+/* Theme: Midnight (deep dark, serif typography, warm amber — optimized for reading) */
+body[data-theme="midnight"] {
+  font-family: 'Lora', Georgia, 'Times New Roman', serif;
+  --bg: #0d0d18;
+  --toolbar-bg: #09090f;
+  --border: #1e1e2e;
+  --text: #e2dbd0;
+  --muted: #6b6480;
+  --accent: #c8992a;
+  --btn-text: #09090f;
+  --h1: #d4a84b;
+  --h2: #c8992a;
+  --h3: #8fb898;
+  --h4: #b8a0c0;
+  --link: #7aabcc;
+  --code: #d4776a;
+  --code-bg: #13131f;
+  --blockquote-bg: #13131f;
+  --error: #e07070;
+  --error-bg: rgba(224, 112, 112, 0.15);
+  --bold-fallback: #c8992a;
+  --bold-gradient: linear-gradient(105deg, #d4a84b, #c8992a, #8fb898);
+}
+body[data-theme="midnight"] .rendered {
+  font-size: 1.05rem;
+  line-height: 1.85;
+  letter-spacing: 0.012em;
+}
+body[data-theme="midnight"] .rendered h1,
+body[data-theme="midnight"] .rendered h2,
+body[data-theme="midnight"] .rendered h3,
+body[data-theme="midnight"] .rendered h4,
+body[data-theme="midnight"] .rendered h5,
+body[data-theme="midnight"] .rendered h6 {
+  font-family: 'Playfair Display', Georgia, serif;
+  letter-spacing: -0.01em;
+}
+body[data-theme="midnight"] .rendered p {
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+body[data-theme="midnight"] .rendered blockquote {
+  font-style: italic;
+  border-left-width: 3px;
 }
 
 /* Theme: Forest (green-tinted dark) */

@@ -1,10 +1,11 @@
 import {
   contentEl, filenameEl,
-  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode,
+  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode,
   setCurrentBlocks, setCurrentTabRef, setReplacingContent,
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
 } from "./state.js";
+import { initBlockNav, clearBlockNav, applyVimMode } from "./vim.js";
 import { escapeHtml, highlightCodeInContainer } from "./utils.js";
 import {
   blockRaw, getBlocks, blocksToContent,
@@ -140,6 +141,8 @@ export function showTabContent(tab, preferredBlocks) {
         setCurrentBlocks(getBlocks(textarea.value));
         saveToFile(tab);
       });
+      clearBlockNav();
+      if (vimMode) applyVimMode(textarea);
       textarea.focus();
       return;
     }
@@ -294,6 +297,8 @@ export function showTabContent(tab, preferredBlocks) {
         }, 0);
       }
     }
+    // Restore vim block-nav cursor after every render.
+    if (vimMode) requestAnimationFrame(() => initBlockNav());
   } finally {
     setReplacingContent(false);
   }

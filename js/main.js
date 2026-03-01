@@ -13,12 +13,19 @@ import "./renderer.js";   // registers onShowTabContent + onShowWelcomeOrEmpty
 import "./editor.js";     // registers onStartInlineEdit
 import "./filetree.js";
 import "./ui.js";
+import "./toc.js";
+import "./vim.js";
+import "./settings.js";
 
 import { applyTheme } from "./ui.js";
+import { initSettings } from "./settings.js";
 import { loadWelcome, whenApiReady } from "./init.js";
 
 // Apply default theme before anything is shown.
 applyTheme("obsidianite");
+
+// Load persisted settings (vim mode, etc.)
+initSettings();
 
 // Start the welcome / API-ready sequence.
 if (document.readyState === "loading") {

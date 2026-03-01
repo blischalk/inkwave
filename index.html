@@ -5,6 +5,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Inkwave</title>
         <link rel="stylesheet" href="style.css" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
         <link
             rel="stylesheet"
             href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
@@ -16,7 +19,13 @@
     </head>
     <body>
         <div class="toolbar">
-            <h1>Inkwave</h1>
+            <h1 class="app-logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2C9 6 6 10 6 14a6 6 0 0012 0c0-4-3-8-6-12z" fill="currentColor"/>
+                    <path d="M2 20Q6.5 17 12 20Q17.5 23 22 20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+                </svg>
+                Inkwave
+            </h1>
             <div class="open-wrap">
                 <button
                     class="btn btn-icon"
@@ -50,7 +59,7 @@
             </div>
             <button
                 type="button"
-                class="btn btn-secondary btn-icon"
+                class="btn btn-icon"
                 id="newFileBtn"
                 title="Create a new markdown file in the current folder"
                 aria-label="New file"
@@ -92,6 +101,20 @@
             <button
                 type="button"
                 class="btn btn-icon"
+                id="tocBtn"
+                title="Table of contents"
+                aria-label="Table of contents"
+                aria-pressed="false"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="6" y1="12" x2="21" y2="12" />
+                    <line x1="9" y1="18" x2="21" y2="18" />
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
                 id="focusBtn"
                 title="Focus mode: hide menu and file tree (Esc to exit)"
                 aria-label="Focus mode"
@@ -100,6 +123,18 @@
                     <path
                         d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
                     />
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
+                id="settingsBtn"
+                title="Settings"
+                aria-label="Settings"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
             </button>
             <label class="theme-label">
@@ -111,6 +146,7 @@
                 >
                     <option value="dracula">Dracula</option>
                     <option value="forest">Forest</option>
+                    <option value="midnight">Midnight</option>
                     <option value="gruvbox">Gruvbox</option>
                     <option value="high-contrast">High contrast</option>
                     <option value="lavender">Lavender</option>
@@ -170,6 +206,14 @@
             </button>
             <div class="content-area">
                 <div class="content empty" id="content">Loading…</div>
+                <div id="vimStatus" class="vim-status" aria-live="polite"></div>
+            </div>
+            <div id="tocPanel" class="toc-panel">
+                <div class="toc-panel-header">
+                    <span>Contents</span>
+                    <button type="button" id="tocCloseBtn" class="toc-close-btn" aria-label="Close table of contents">×</button>
+                </div>
+                <div class="toc-panel-body" id="tocBody"></div>
             </div>
             <div id="debugPanel" class="debug-panel" aria-live="polite">
                 <div class="debug-line debug-header">
@@ -196,6 +240,23 @@
                     <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
                 <span>Drop markdown file to open</span>
+            </div>
+        </div>
+        <div id="settingsModal" class="settings-modal" role="dialog" aria-modal="true" aria-label="Settings" hidden>
+            <div class="settings-panel">
+                <div class="settings-header">
+                    <h2>Settings</h2>
+                    <button type="button" id="settingsCloseBtn" class="settings-close-btn" aria-label="Close settings">×</button>
+                </div>
+                <div class="settings-body">
+                    <label class="settings-row">
+                        <div class="settings-row-info">
+                            <span class="settings-row-title">Vim keybindings</span>
+                            <span class="settings-row-desc">Enable Vim-style navigation in both block and raw editing modes (normal/insert/command)</span>
+                        </div>
+                        <input type="checkbox" id="vimModeToggle" class="settings-toggle" role="switch" aria-checked="false" />
+                    </label>
+                </div>
             </div>
         </div>
         <script type="module" src="js/main.js"></script>
