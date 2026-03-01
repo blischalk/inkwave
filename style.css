@@ -485,6 +485,21 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
 .md-block-list .inline-edit {
   color: var(--text);
 }
+/* Bullet indicator for a div being converted to a list item mid-edit
+   (before it is committed and re-rendered as a native <li>).
+   Targets div only — <li> elements get their bullet from the parent <ul>. */
+div.md-block-list.editing {
+  padding-left: 1.5em;
+}
+div.md-block-list.editing::before {
+  content: '•';
+  position: absolute;
+  left: 0.4em;
+  top: 0.15em;
+  color: var(--accent);
+  font-weight: 700;
+  pointer-events: none;
+}
 .md-list-container {
   margin: 0.2em 0;
   padding-left: 1.5em;
@@ -501,19 +516,26 @@ ul.md-list-container {
 .md-list-container ol {
   list-style-type: decimal;
 }
+/* ── Typography ─────────────────────────────────────────────────────────────
+   Each block lives in its own .md-block div (padding: 2px 4px), so CSS margin
+   collapsing does NOT happen between siblings.  The visual gap between two
+   adjacent blocks = bottom-margin-of-inner-element + top-margin-of-next-inner.
+   Headings use a 2.5 : 1 top-to-bottom ratio so they feel anchored to the
+   content below rather than floating in the middle.
+   ─────────────────────────────────────────────────────────────────────────── */
+
 .rendered h1 {
   font-size: 2rem;
   line-height: 1.2;
-  margin: 1.8em 0 0.6em;
+  margin: 0.75em 0 0.3em;
   color: var(--h1);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
-.rendered h1:first-child { margin-top: 0; }
 .rendered h2 {
   font-size: 1.6rem;
   line-height: 1.25;
-  margin: 1.5em 0 0.55em;
+  margin: 0.7em 0 0.28em;
   color: var(--h2);
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -521,7 +543,7 @@ ul.md-list-container {
 .rendered h3 {
   font-size: 1.3rem;
   line-height: 1.3;
-  margin: 1.3em 0 0.5em;
+  margin: 0.65em 0 0.25em;
   color: var(--h3);
   font-weight: 600;
 }
@@ -530,27 +552,35 @@ ul.md-list-container {
 .rendered h6 {
   font-size: 1.1rem;
   line-height: 1.35;
-  margin: 1.1em 0 0.45em;
+  margin: 0.6em 0 0.2em;
   color: var(--h4);
   font-weight: 600;
 }
+/* No top gap when a heading opens the document */
+.rendered > .md-block:first-child h1,
+.rendered > .md-block:first-child h2,
+.rendered > .md-block:first-child h3,
+.rendered > .md-block:first-child h4,
+.rendered > .md-block:first-child h5,
+.rendered > .md-block:first-child h6 { margin-top: 0; }
+
 .rendered p {
-  margin: 0.9em 0;
-  line-height: 1.7;
+  margin: 0.5em 0;
+  line-height: 1.75;
   color: var(--text);
 }
 .rendered ul,
 .rendered ol {
-  margin: 0.9em 0;
+  margin: 0.5em 0;
   padding-left: 1.5em;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 .rendered .md-block-list ul, .rendered .md-block-list ol { margin: 0.2em 0; }
-.rendered li { margin: 0.4em 0; }
+.rendered li { margin: 0.25em 0; }
 .rendered .md-block-list li { margin: 0.2em 0; }
 .rendered blockquote {
-  margin: 1em 0;
-  padding: 0.5em 1em;
+  margin: 0.5em 0;
+  padding: 0.6em 1em;
   border-left: 4px solid var(--accent);
   background: var(--blockquote-bg);
   color: var(--muted);
@@ -565,7 +595,7 @@ ul.md-list-container {
   color: var(--code);
 }
 .rendered pre {
-  margin: 1em 0;
+  margin: 0.5em 0;
   padding: 1em;
   background: var(--code-bg);
   border-radius: 8px;
@@ -573,7 +603,7 @@ ul.md-list-container {
 }
 .rendered pre code { background: none; padding: 0; }
 .rendered pre code:not(.hljs) { color: var(--text); }
-.rendered hr { border: none; height: 1px; background: var(--border); margin: 1.5em 0; }
+.rendered hr { border: none; height: 1px; background: var(--border); margin: 1.2em 0; }
 .rendered a { color: var(--link); text-decoration: none; }
 .rendered a:hover { text-decoration: underline; }
 .rendered strong, .rendered b {

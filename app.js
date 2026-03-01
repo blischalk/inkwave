@@ -622,6 +622,12 @@ function startInlineEdit(blockEl, index, blocks, tab, clickEvent) {
   var editable = document.createElement('div');
   editable.className = 'inline-edit';
   editable.contentEditable = 'true';
+  if (isCodeBlock) {
+    editable.setAttribute('autocapitalize', 'none');
+    editable.setAttribute('autocorrect', 'off');
+    editable.setAttribute('autocomplete', 'off');
+    editable.setAttribute('spellcheck', 'false');
+  }
   editable.textContent = blockType === 'list' ? stripListMarker(raw) : raw;
   if (!editable.firstChild) editable.appendChild(document.createTextNode(''));
   blockEl.appendChild(editable);
