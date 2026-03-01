@@ -1,95 +1,178 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markdown Reader</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js"></script>
-</head>
-<body>
-  <div class="toolbar">
-    <h1>Markdown Reader</h1>
-    <div class="open-wrap">
-      <button class="btn btn-icon" id="openBtn" type="button" title="Open file or folder" aria-label="Open file or folder">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><polyline points="2 12 6 12 8 12 22 12"/></svg>
-        <svg class="chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="open-menu" id="openMenu">
-        <button type="button" data-action="file">Open file</button>
-        <button type="button" data-action="folder">Open folder</button>
-      </div>
-    </div>
-    <button type="button" class="btn btn-secondary btn-icon" id="newFileBtn" title="Create a new markdown file in the current folder" aria-label="New file">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-    </button>
-    <button type="button" class="btn btn-icon" id="focusBtn" title="Focus mode: hide menu and file tree (Esc to exit)" aria-label="Focus mode">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-    </button>
-    <label class="theme-label">
-      Theme
-      <select class="theme-picker" id="themePicker" title="Choose reading theme">
-        <option value="dracula">Dracula</option>
-        <option value="forest">Forest</option>
-        <option value="gruvbox">Gruvbox</option>
-        <option value="high-contrast">High contrast</option>
-        <option value="lavender">Lavender</option>
-        <option value="mocha">Mocha</option>
-        <option value="nord">Nord</option>
-        <option value="obsidianite">Obsidianite</option>
-        <option value="paper">Paper</option>
-        <option value="rose-pine">Rose Pine</option>
-        <option value="sepia">Sepia</option>
-        <option value="solarized-light">Solarized Light</option>
-      </select>
-    </label>
-    <span class="filename" id="filename"></span>
-  </div>
-  <div class="tab-bar hidden" id="tabBar">
-    <!-- tabs appended by JS -->
-  </div>
-  <div class="main-wrap">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <span>Files</span>
-        <button type="button" class="sidebar-toggle" id="sidebarToggle" title="Collapse file tree">◀</button>
-      </div>
-      <div class="tree-wrap">
-        <ul class="tree" id="tree"></ul>
-      </div>
-    </aside>
-    <div class="context-menu" id="treeContextMenu">
-      <button type="button" id="newFileHereBtn">New file here</button>
-      <button type="button" id="deleteFileBtn">Delete</button>
-    </div>
-    <button type="button" class="show-sidebar-btn" id="showSidebarBtn" title="Show file tree">▶ Files</button>
-    <button type="button" class="focus-exit" id="focusExitBtn" title="Exit focus mode (Esc)" aria-label="Exit focus mode">
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 6l12 12M18 6L6 18"/>
-      </svg>
-    </button>
-    <div class="content-area">
-      <div class="content empty" id="content">
-        Loading…
-      </div>
-    </div>
-    <div id="debugPanel" class="debug-panel" aria-live="polite"><div class="debug-line debug-header">Debug log (new doc → # A → Enter → B)</div></div>
-  </div>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Inkwave</title>
+        <link rel="stylesheet" href="style.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js"></script>
+    </head>
+    <body>
+        <div class="toolbar">
+            <h1>Inkwave</h1>
+            <div class="open-wrap">
+                <button
+                    class="btn btn-icon"
+                    id="openBtn"
+                    type="button"
+                    title="Open file or folder"
+                    aria-label="Open file or folder"
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                        />
+                        <polyline points="2 12 6 12 8 12 22 12" />
+                    </svg>
+                    <svg
+                        class="chevron"
+                        viewBox="0 0 24 24"
+                        width="14"
+                        height="14"
+                        aria-hidden="true"
+                    >
+                        <path d="M6 9l6 6 6-6" />
+                    </svg>
+                </button>
+                <div class="open-menu" id="openMenu">
+                    <button type="button" data-action="file">Open file</button>
+                    <button type="button" data-action="folder">
+                        Open folder
+                    </button>
+                </div>
+            </div>
+            <button
+                type="button"
+                class="btn btn-secondary btn-icon"
+                id="newFileBtn"
+                title="Create a new markdown file in the current folder"
+                aria-label="New file"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                    />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
+                id="focusBtn"
+                title="Focus mode: hide menu and file tree (Esc to exit)"
+                aria-label="Focus mode"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                        d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+                    />
+                </svg>
+            </button>
+            <label class="theme-label">
+                Theme
+                <select
+                    class="theme-picker"
+                    id="themePicker"
+                    title="Choose reading theme"
+                >
+                    <option value="dracula">Dracula</option>
+                    <option value="forest">Forest</option>
+                    <option value="gruvbox">Gruvbox</option>
+                    <option value="high-contrast">High contrast</option>
+                    <option value="lavender">Lavender</option>
+                    <option value="mocha">Mocha</option>
+                    <option value="nord">Nord</option>
+                    <option value="obsidianite">Obsidianite</option>
+                    <option value="paper">Paper</option>
+                    <option value="rose-pine">Rose Pine</option>
+                    <option value="sepia">Sepia</option>
+                    <option value="solarized-light">Solarized Light</option>
+                </select>
+            </label>
+            <span class="filename" id="filename"></span>
+        </div>
+        <div class="tab-bar hidden" id="tabBar">
+            <!-- tabs appended by JS -->
+        </div>
+        <div class="main-wrap">
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <span>Files</span>
+                    <button
+                        type="button"
+                        class="sidebar-toggle"
+                        id="sidebarToggle"
+                        title="Collapse file tree"
+                    >
+                        ◀
+                    </button>
+                </div>
+                <div class="tree-wrap">
+                    <ul class="tree" id="tree"></ul>
+                </div>
+            </aside>
+            <div class="context-menu" id="treeContextMenu">
+                <button type="button" id="newFileHereBtn">New file here</button>
+                <button type="button" id="deleteFileBtn">Delete</button>
+            </div>
+            <button
+                type="button"
+                class="show-sidebar-btn"
+                id="showSidebarBtn"
+                title="Show file tree"
+            >
+                ▶ Files
+            </button>
+            <button
+                type="button"
+                class="focus-exit"
+                id="focusExitBtn"
+                title="Exit focus mode (Esc)"
+                aria-label="Exit focus mode"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            </button>
+            <div class="content-area">
+                <div class="content empty" id="content">Loading…</div>
+            </div>
+            <div id="debugPanel" class="debug-panel" aria-live="polite">
+                <div class="debug-line debug-header">
+                    Debug log (new doc → # A → Enter → B)
+                </div>
+            </div>
+        </div>
 
-  <div id="dropOverlay" class="drop-overlay">
-    <div class="drop-overlay-inner">
-      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
-      <span>Drop markdown file to open</span>
-    </div>
-  </div>
-  <script src="app.js"></script>
-</body>
+        <div id="dropOverlay" class="drop-overlay">
+            <div class="drop-overlay-inner">
+                <svg
+                    viewBox="0 0 24 24"
+                    width="48"
+                    height="48"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Drop markdown file to open</span>
+            </div>
+        </div>
+        <script src="app.js"></script>
+    </body>
 </html>

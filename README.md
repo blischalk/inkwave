@@ -1,4 +1,4 @@
-# Markdown Reader
+# Inkwave
 
 A small desktop app to open and view Markdown (`.md`) files in rendered form—headings, paragraphs, lists, code blocks, and links styled for easy reading.
 

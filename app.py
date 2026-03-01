@@ -1,5 +1,5 @@
 """
-Markdown Reader - A simple desktop app to view markdown files rendered.
+Inkwave - A simple desktop app to view markdown files rendered.
 Uses PyWebView (system web view) and requires only: pip install pywebview
 """
 
@@ -37,6 +37,9 @@ if _FILE_DIALOG_OPEN is None:
 _FILE_DIALOG_FOLDER = getattr(_file_dialog, "FOLDER", None) if _file_dialog else None
 if _FILE_DIALOG_FOLDER is None:
     _FILE_DIALOG_FOLDER = getattr(webview, "FOLDER_DIALOG", 20)
+_FILE_DIALOG_SAVE = getattr(_file_dialog, "SAVE", None) if _file_dialog else None
+if _FILE_DIALOG_SAVE is None:
+    _FILE_DIALOG_SAVE = getattr(webview, "SAVE_DIALOG", 10)
 
 MD_EXTENSIONS = (".md", ".markdown")
 
@@ -214,6 +217,25 @@ class Api:
         except Exception:
             return None
 
+    def save_as(self, suggested_name):
+        """Open a Save As dialog and return the chosen path, or None if cancelled."""
+        try:
+            result = self._window.create_file_dialog(
+                _FILE_DIALOG_SAVE,
+                save_filename=suggested_name or "Untitled.md",
+                file_types=("Markdown files (*.md;*.markdown)", "All files (*.*)"),
+            )
+            if not result:
+                return None
+            path = result if isinstance(result, str) else (result[0] if result else None)
+            if not path:
+                return None
+            if not path.lower().endswith(MD_EXTENSIONS):
+                path = path.rstrip(".") + ".md"
+            return {"path": path}
+        except Exception as e:
+            return {"error": str(e)}
+
     def toggle_fullscreen(self):
         """Toggle native window fullscreen (hides title bar and OS menu). Used by focus mode."""
         try:
@@ -266,7 +288,7 @@ def main():
 
     api = Api(None)
     window = webview.create_window(
-        "Markdown Reader",
+        "Inkwave",
         os.path.join(BASE_DIR, "index.html"),
         width=1200,
         height=800,
