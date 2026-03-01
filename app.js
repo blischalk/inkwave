@@ -36,6 +36,15 @@ function highlightCodeInContainer(container) {
   });
 }
 
+window.__applySettings = function (dataStr) {
+  try {
+    var settings = JSON.parse(dataStr);
+    if (settings && settings.theme && themePicker.querySelector('option[value="' + settings.theme + '"]')) {
+      applyTheme(settings.theme);
+    }
+  } catch (e) {}
+};
+
 window.__applyWelcome = function (dataStr) {
   try {
     var data = JSON.parse(dataStr);
@@ -949,6 +958,18 @@ function showTabContent(tab, preferredBlocks) {
         startInlineEdit(blockEl, idx, currentBlocks, tab, e);
       });
     });
+    // Ensure clicks anywhere inside a code block's <pre>/<code> trigger editing,
+    // since webkit may not bubble clicks from scrollable <pre> elements reliably.
+    contentEl.querySelectorAll('.md-block-code').forEach(function (codeBlockEl) {
+      var pre = codeBlockEl.querySelector('pre');
+      if (!pre) return;
+      pre.addEventListener('click', function (e) {
+        if (codeBlockEl.classList.contains('editing')) return;
+        var idx = parseInt(codeBlockEl.getAttribute('data-block-index'), 10);
+        if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
+        startInlineEdit(codeBlockEl, idx, currentBlocks, tab, e);
+      });
+    });
     // Click anywhere in content area (including padding/empty space) but not on a block → new paragraph
     contentEl.onclick = function (e) {
       if (e.target.closest('.md-block')) return;
@@ -1418,16 +1439,18 @@ document.getElementById('showSidebarBtn').addEventListener('click', function () 
 });
 
 const themePicker = document.getElementById('themePicker');
-const THEME_KEY = 'markdown-reader-theme';
 
 function applyTheme(themeId) {
   document.body.setAttribute('data-theme', themeId);
   themePicker.value = themeId;
-  try { localStorage.setItem(THEME_KEY, themeId); } catch (e) {}
 }
 
 themePicker.addEventListener('change', function () {
   applyTheme(this.value);
+  var a = getApi();
+  if (a && typeof a.save_setting === 'function') {
+    a.save_setting('theme', this.value);
+  }
 });
 
 var focusBtn = document.getElementById('focusBtn');
@@ -1483,18 +1506,7 @@ window.addEventListener('beforeunload', function () {
   flushActiveEditAndSave();
 });
 
-(function initTheme() {
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved && themePicker.querySelector('option[value="' + saved + '"]')) {
-      applyTheme(saved);
-    } else {
-      applyTheme('obsidianite');
-    }
-  } catch (e) {
-    applyTheme('obsidianite');
-  }
-})();
+applyTheme('obsidianite');
 
 function showFallbackContent() {
   contentEl.className = 'content empty';

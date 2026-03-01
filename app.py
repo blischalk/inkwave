@@ -209,6 +209,34 @@ class Api:
         except Exception:
             pass
 
+    def _settings_path(self):
+        path = os.path.join(BASE_DIR, "settings.json")
+        return path
+
+    def load_settings(self):
+        """Load all persisted settings. Returns a dict (empty if none saved)."""
+        try:
+            with open(self._settings_path(), "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def save_setting(self, key, value):
+        """Persist a single setting by key."""
+        try:
+            path = self._settings_path()
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+            data[key] = value
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
 
 def main():
     if os.name == "nt":
@@ -242,8 +270,19 @@ def main():
         except Exception:
             pass
 
+    def inject_settings():
+        try:
+            settings = api.load_settings()
+            arg = json.dumps(settings)
+            window.evaluate_js(
+                "if (window.__applySettings) window.__applySettings(" + json.dumps(arg) + ");"
+            )
+        except Exception:
+            pass
+
     try:
         window.events.loaded += inject_welcome
+        window.events.loaded += inject_settings
     except Exception:
         pass
 

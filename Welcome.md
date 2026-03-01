@@ -1,8 +1,12 @@
 # Welcome to Markdown Reader
 
+
+
 A simple desktop app for reading Markdown (`.md`) files in a clean, rendered view.
 
 ## What you can do
+
+
 
 - **Open a file or folder** — Use **Open file or folder ▾** in the toolbar. Choose **Open file** to pick a single markdown file, or **Open folder** to browse a directory. Only folders and `.md` / `.markdown` files appear in the tree.
 
@@ -13,6 +17,8 @@ A simple desktop app for reading Markdown (`.md`) files in a clean, rendered vie
 - **Switch themes** — Use the **Theme** dropdown to change the look. Themes affect the whole app, including the tree and this welcome text. Bold text uses theme-matched gradients in supported themes.
 
 ## Getting started
+
+
 
 Click **Open file or folder ▾** and select a markdown file or a folder that contains your notes or docs. The tree will list only directories and markdown files so you can navigate quickly.
 

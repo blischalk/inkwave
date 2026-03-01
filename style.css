@@ -91,8 +91,12 @@ body {
   font-size: 0.9rem;
   text-align: left;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.open-menu button:hover { background: var(--code-bg); }
+.open-menu button:hover {
+  background: var(--code-bg);
+  color: var(--accent);
+}
 .theme-label {
   display: flex;
   align-items: center;
@@ -414,6 +418,19 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
 .md-block:hover {
   background: var(--code-bg);
 }
+.md-block-code:not(.editing) {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.md-block-code:not(.editing) pre,
+.md-block-code:not(.editing) code,
+.md-block-code:not(.editing) span {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
 .md-block-empty {
   min-height: 1.5em;
 }
@@ -466,17 +483,7 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
 .md-block-code .inline-edit { font-family: "Cascadia Code", "Consolas", monospace; font-size: 0.9em; color: var(--code); white-space: pre; }
 .md-block-blockquote .inline-edit { color: var(--muted); }
 .md-block-list .inline-edit {
-  padding-left: 1.5em;
   color: var(--text);
-}
-.md-block-list.editing .inline-edit::before {
-  content: '•';
-  position: absolute;
-  left: 0.25em;
-  top: 0;
-  color: var(--accent);
-  font-weight: 700;
-  pointer-events: none;
 }
 .md-list-container {
   margin: 0.2em 0;
@@ -490,22 +497,6 @@ ul.md-list-container {
   margin: 0.35em 0;
   padding-left: 0;
   position: relative;
-}
-.md-list-container .md-block-list.editing {
-  padding-left: 1.5em;
-  list-style: none;
-}
-.md-list-container .md-block-list.editing::before {
-  content: '•';
-  position: absolute;
-  left: 0.25em;
-  top: 0;
-  color: var(--accent);
-  font-weight: 700;
-  pointer-events: none;
-}
-.md-list-container ol .md-block-list.editing::before {
-  content: none;
 }
 .md-list-container ol {
   list-style-type: decimal;
