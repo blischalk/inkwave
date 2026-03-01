@@ -5,12 +5,14 @@ import {
   themePicker, focusBtn, focusExitBtn,
   treeRoot,
   setActiveTabId,
+  currentTabRef, currentBlocks, setCurrentBlocks, onShowTabContent,
 } from "./state.js";
 import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
 import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tabs.js";
 import { initTree, openFile, selectFile, createInFolder, refreshFolder } from "./filetree.js";
-import { saveOrSaveAs, flushActiveEditAndSave } from "./fileio.js";
+import { saveToFile, saveOrSaveAs, flushActiveEditAndSave } from "./fileio.js";
+import { getBlocks, blocksToContent } from "./blocks.js";
 import { render } from "./renderer.js";
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -295,11 +297,39 @@ window.addEventListener("beforeunload", () => {
   flushActiveEditAndSave();
 });
 
-// ── Drag-and-drop to open markdown files ──────────────────────────────────────
+// ── Drag-and-drop: open markdown files / insert images ────────────────────────
 const dropOverlay = document.getElementById("dropOverlay");
 
 function isMarkdown(name) {
   return /\.(md|markdown)$/i.test(name);
+}
+
+function isImageFile(file) {
+  return file.type && file.type.startsWith("image/");
+}
+
+function insertImageBlock(tab, imageMarkdown, insertAfterIndex) {
+  const blocks = getBlocks(tab.content || "");
+  const newBlock = { type: "paragraph", raw: imageMarkdown };
+  const idx = typeof insertAfterIndex === "number" && insertAfterIndex >= 0
+    ? Math.min(insertAfterIndex + 1, blocks.length)
+    : blocks.length;
+  blocks.splice(idx, 0, newBlock);
+  tab.content = blocksToContent(blocks);
+  if (currentTabRef === tab) {
+    setCurrentBlocks(blocks);
+  }
+  saveToFile(tab);
+  if (onShowTabContent) onShowTabContent(tab);
+}
+
+function getBlockIndexUnderPoint(clientX, clientY) {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return -1;
+  const block = el.closest && el.closest(".md-block");
+  if (!block) return -1;
+  const idx = parseInt(block.getAttribute("data-block-index"), 10);
+  return isNaN(idx) ? -1 : idx;
 }
 
 function openDroppedFile(file) {
@@ -371,6 +401,44 @@ document.addEventListener("drop", (e) => {
   dropOverlay.classList.remove("active");
   const files = e.dataTransfer && e.dataTransfer.files;
   if (!files || files.length === 0) return;
+
+  const imageFiles = [...files].filter(isImageFile);
+  const tab = currentTabRef;
+  if (imageFiles.length > 0 && tab && tab.path) {
+    const file = imageFiles[0];
+    const dropX = e.clientX;
+    const dropY = e.clientY;
+    const dropTarget = e.target;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      const base64 = dataUrl.indexOf(",") >= 0 ? dataUrl.slice(dataUrl.indexOf(",") + 1) : dataUrl;
+      const api = getApi();
+      if (!api || typeof api.save_image !== "function") {
+        showError("Cannot save image.");
+        return;
+      }
+      api
+        .save_image(tab.path, file.name, base64)
+        .then((res) => {
+          if (res && res.error) {
+            showError(res.error);
+            return;
+          }
+          const alt = (file.name || "image").replace(/\.[^.]+$/, "") || "image";
+          const imageMd = `![${alt}](${res.name})`;
+          const insertIndex = contentEl.contains(dropTarget)
+            ? getBlockIndexUnderPoint(dropX, dropY)
+            : -1;
+          insertImageBlock(tab, imageMd, insertIndex);
+        })
+        .catch(showError);
+    };
+    reader.onerror = () => showError("Could not read image.");
+    reader.readAsDataURL(file);
+    return;
+  }
+
   for (let i = 0; i < files.length; i++) {
     if (isMarkdown(files[i].name)) {
       openDroppedFile(files[i]);

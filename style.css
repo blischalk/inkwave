@@ -452,6 +452,38 @@ body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
 .md-block-empty {
   min-height: 1.5em;
 }
+/* Image resize: wrap and handle */
+.md-image-wrap {
+  display: inline-block;
+  position: relative;
+  line-height: 0;
+  max-width: 100%;
+}
+.md-image-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+.md-image-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: var(--accent);
+  opacity: 0.7;
+  border-radius: 2px 0 0 0;
+}
+.md-image-resize-handle:hover {
+  opacity: 1;
+}
+.md-image-wrap.md-image-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
 .md-block.editing {
   padding: 0;
   margin: 0;

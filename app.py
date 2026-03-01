@@ -3,8 +3,10 @@ Inkwave - A simple desktop app to view markdown files rendered.
 Uses PyWebView (system web view) and requires only: pip install pywebview
 """
 
+import base64
 import json
 import os
+import re
 import sys
 
 # Prefer Edge (WebView2) on Windows to avoid WinForms/pythonnet errors.
@@ -193,6 +195,42 @@ class Api:
             return {"path": path, "content": content}
         except Exception as e:
             return {"path": path, "content": None, "error": str(e)}
+
+    def save_image(self, md_file_path, filename, base64_content):
+        """Save an image file next to the given markdown file. Returns { path, name } or { error }."""
+        if not md_file_path or not os.path.isfile(md_file_path):
+            return {"error": "No open file or file not found."}
+        folder = os.path.dirname(md_file_path)
+        if not os.path.isdir(folder):
+            return {"error": "Invalid folder."}
+        # Keep only safe filename: alphanumeric, dash, underscore, dot; preserve extension
+        base_name = (filename or "image").strip() or "image"
+        base_name = re.sub(r"[^\w\-.]", "_", base_name)
+        if not base_name:
+            base_name = "image"
+        name, ext = os.path.splitext(base_name)
+        if not ext or ext.lower() not in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"):
+            ext = ".png"
+        filename = name + ext
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            for n in range(1, 1000):
+                path = os.path.join(folder, f"{name}_{n}{ext}")
+                if not os.path.isfile(path):
+                    filename = os.path.basename(path)
+                    break
+            else:
+                return {"error": "Could not generate unique filename."}
+        try:
+            raw = base64.b64decode(base64_content, validate=True)
+        except Exception as e:
+            return {"error": f"Invalid image data: {e}"}
+        try:
+            with open(path, "wb") as f:
+                f.write(raw)
+            return {"path": path, "name": os.path.basename(path)}
+        except Exception as e:
+            return {"path": path, "error": str(e)}
 
     def delete_file(self, path):
         """Delete a markdown file. Returns { success, error? }."""
