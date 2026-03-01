@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="70%">
+      <stop offset="0%"   stop-color="#1a1530"/>
+      <stop offset="100%" stop-color="#0d0b12"/>
+    </radialGradient>
+    <radialGradient id="dropGrad" cx="38%" cy="32%" r="65%">
+      <stop offset="0%"   stop-color="#3de0f7"/>
+      <stop offset="55%"  stop-color="#0fb6d6"/>
+      <stop offset="100%" stop-color="#0878a0"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background fills the full square -->
+  <rect width="1024" height="1024" fill="url(#bgGrad)"/>
+
+  <!-- Wave lines -->
+  <g opacity="0.55" stroke="#0fb6d6" stroke-linecap="round" fill="none">
+    <path d="M 80 620 Q 250 568 420 620 Q 590 672 760 620 Q 880 584 1000 620"
+          stroke-width="20" opacity="0.9"/>
+    <path d="M 80 692 Q 250 640 420 692 Q 590 744 760 692 Q 880 656 1000 692"
+          stroke-width="15" opacity="0.65"/>
+    <path d="M 80 760 Q 250 708 420 760 Q 590 812 760 760 Q 880 724 1000 760"
+          stroke-width="10" opacity="0.4"/>
+  </g>
+
+  <!-- Ink drop body -->
+  <g filter="url(#glow)">
+    <path d="M 512 200
+             C 512 200 330 385 330 505
+             C 330 608 412 688 512 688
+             C 612 688 694 608 694 505
+             C 694 385 512 200 512 200 Z"
+          fill="url(#dropGrad)"/>
+  </g>
+
+  <!-- Specular highlights -->
+  <ellipse cx="464" cy="368" rx="40" ry="62"
+           fill="white" opacity="0.18"
+           transform="rotate(-18 464 368)"/>
+  <ellipse cx="452" cy="352" rx="17" ry="28"
+           fill="white" opacity="0.28"
+           transform="rotate(-18 452 352)"/>
+</svg>
