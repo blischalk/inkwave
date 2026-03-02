@@ -975,7 +975,8 @@ body[data-debug="true"] .debug-panel { display: block; }
   -webkit-user-select: none;
 }
 .vim-status:empty { border-top-color: transparent; background: transparent; }
-.raw-editor.vim-normal { caret-color: transparent; }
+/* In block mode we use a fake cursor; in raw mode keep the native caret visible so the user can see position when navigating with j/k/h/l */
+.raw-editor.vim-normal { caret-color: var(--text); }
 /* In vim normal mode, give the content pane a subtle focus ring so the user knows it's active */
 #content[tabindex]:focus { outline: none; }
 /* Fake blinking cursor for vim block-nav mode (normal divs don't show a native caret).

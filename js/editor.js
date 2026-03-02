@@ -4,12 +4,14 @@ import {
   setCurrentBlocks,
   onShowTabContent,
   registerStartInlineEdit,
+  vimMode,
 } from "./state.js";
 import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
 import { saveToFile } from "./fileio.js";
 import { getActiveTab } from "./tabs.js";
 import { dbg, DEBUG_ENTER } from "./debug.js";
+import { getYank } from "./vim.js";
 
 // startInlineEdit: sixth argument (cursorHint) can be:
 //   - a number → explicit character offset
@@ -102,9 +104,31 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
       blockEl.removeEventListener("input", syncContentAndAutosave);
       blockEl.contentEditable = "false";
       blockEl.classList.remove("editing");
+      delete blockEl._vimSync;
       commit();
     });
-    blockEl.addEventListener("keydown", (e) => {
+    blockEl._vimSync = syncContentAndAutosave;
+    const onListKeydown = (e) => {
+      const k = (e.key || "").toLowerCase();
+      if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && (k === "o" || k === "p")) {
+        if (k === "o") {
+          e.preventDefault();
+          e.stopPropagation();
+          document.execCommand("insertLineBreak", false, null);
+          syncContentAndAutosave();
+          return;
+        }
+        if (k === "p") {
+          const yank = getYank();
+          if (yank) {
+            e.preventDefault();
+            e.stopPropagation();
+            document.execCommand("insertText", false, yank);
+            syncContentAndAutosave();
+          }
+          return;
+        }
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         blockEl.blur();
@@ -242,7 +266,8 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         });
         return;
       }
-    });
+    };
+    blockEl.addEventListener("keydown", onListKeydown, true);
 
     blockEl.focus();
     setTimeout(() => {
@@ -381,9 +406,33 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
 
   editable.addEventListener("blur", function onBlur() {
     editable.removeEventListener("blur", onBlur);
+    delete editable._vimSync;
+    delete blockEl._vimSync;
     commit();
   });
+  editable._vimSync = syncContentAndAutosave;
+  blockEl._vimSync = syncContentAndAutosave;
   editable.addEventListener("keydown", (e) => {
+    const k = (e.key || "").toLowerCase();
+    if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && (k === "o" || k === "p")) {
+      if (k === "o") {
+        e.preventDefault();
+        e.stopPropagation();
+        document.execCommand("insertLineBreak", false, null);
+        syncContentAndAutosave();
+        return;
+      }
+      if (k === "p") {
+        const yank = getYank();
+        if (yank) {
+          e.preventDefault();
+          e.stopPropagation();
+          document.execCommand("insertText", false, yank);
+          syncContentAndAutosave();
+        }
+        return;
+      }
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       editable.blur();
@@ -619,7 +668,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         }, 0);
       });
     }
-  });
+  }, true);
 }
 
 export function handleEnterInBlock(editable, blockEl, index) {
@@ -859,3 +908,56 @@ document.addEventListener(
 
 // Register callback so renderer.js can call startInlineEdit without a direct import.
 registerStartInlineEdit(startInlineEdit);
+
+// Inline-edit vim o/p: use beforeinput (reliable when keydown isn't) and keydown.
+function handleInlineEditVimOP(e) {
+  if (!vimMode) return false;
+  const editingBlock =
+    (e.target && e.target.closest && e.target.closest(".md-block.editing")) ||
+    (contentEl && contentEl.querySelector(".md-block.editing"));
+  if (!editingBlock || typeof editingBlock._vimSync !== "function") return false;
+  if (e.type === "beforeinput") {
+    if (e.inputType !== "insertText" || e.data == null) return false;
+    const key = (e.data.length === 1 ? e.data : "").toLowerCase();
+    if (key === "o") {
+      e.preventDefault();
+      document.execCommand("insertLineBreak", false, null);
+      editingBlock._vimSync();
+      return true;
+    }
+    if (key === "p") {
+      const yank = getYank();
+      if (yank) {
+        e.preventDefault();
+        document.execCommand("insertText", false, yank);
+        editingBlock._vimSync();
+        return true;
+      }
+    }
+    return false;
+  }
+  // keydown
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  const k = (e.key || "").toLowerCase();
+  if (k !== "o" && k !== "p") return false;
+  if (k === "o") {
+    e.preventDefault();
+    e.stopPropagation();
+    document.execCommand("insertLineBreak", false, null);
+    editingBlock._vimSync();
+    return true;
+  }
+  if (k === "p") {
+    const yank = getYank();
+    if (yank) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.execCommand("insertText", false, yank);
+      editingBlock._vimSync();
+      return true;
+    }
+  }
+  return false;
+}
+document.addEventListener("beforeinput", handleInlineEditVimOP, true);
+document.addEventListener("keydown", handleInlineEditVimOP, true);

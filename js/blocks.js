@@ -50,6 +50,48 @@ export function blocksToContent(blocks) {
   return result;
 }
 
+/** Offsets of each block in the content string (from blocksToContent). [{ start, end }, ...] */
+export function getBlockOffsets(blocks) {
+  if (blocks.length === 0) return [];
+  function cleanRaw(b) { return blockRaw(b).replace(/[\s]+$/, ""); }
+  const out = [];
+  let pos = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const raw = cleanRaw(blocks[i]);
+    out.push({ start: pos, end: pos + raw.length });
+    pos += raw.length;
+    if (i < blocks.length - 1) {
+      const prevType = typeof blocks[i] === "object" ? blocks[i].type : "paragraph";
+      const curType  = typeof blocks[i + 1] === "object" ? blocks[i + 1].type : "paragraph";
+      const sep = (prevType === "list" && curType === "list") ? "\n" : "\n\n";
+      pos += sep.length;
+    }
+  }
+  return out;
+}
+
+/** Map a content character offset to block index and offset within that block. */
+export function contentOffsetToBlockAndOffset(blocks, contentOffset) {
+  const offsets = getBlockOffsets(blocks);
+  if (offsets.length === 0) return { blockIndex: 0, offsetInBlock: 0 };
+  const off = Math.max(0, Math.min(contentOffset, offsets[offsets.length - 1].end));
+  for (let i = 0; i < offsets.length; i++) {
+    if (off < offsets[i].end) return { blockIndex: i, offsetInBlock: off - offsets[i].start };
+  }
+  const last = offsets[offsets.length - 1];
+  return { blockIndex: offsets.length - 1, offsetInBlock: last.end - last.start };
+}
+
+/** Map block index + offset within block to content character offset. */
+export function blockAndOffsetToContentOffset(blocks, blockIndex, offsetInBlock) {
+  const offsets = getBlockOffsets(blocks);
+  if (offsets.length === 0) return 0;
+  const i = Math.max(0, Math.min(blockIndex, offsets.length - 1));
+  const seg = offsets[i];
+  const off = Math.max(0, Math.min(offsetInBlock, seg.end - seg.start));
+  return seg.start + off;
+}
+
 export function getInlineBlockType(text) {
   const line = (typeof text === "string" ? text : "").split("\n")[0] || "";
   const t = line.trimStart();

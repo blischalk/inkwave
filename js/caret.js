@@ -55,6 +55,28 @@ export function renderedOffsetToSourceOffset(
   return safeOffset;
 }
 
+/** Map source (raw) offset to rendered DOM offset for placing caret in block. */
+export function sourceOffsetToRenderedOffset(source, sourceOffset, blockType) {
+  const off = Math.max(0, Math.min(sourceOffset, source.length));
+  if (blockType === "heading") {
+    const m = source.match(/^#+\s*/);
+    const prefixLen = m ? m[0].length : 0;
+    return Math.max(0, off - prefixLen);
+  }
+  if (blockType === "blockquote") {
+    const firstLine = source.split("\n")[0] || "";
+    const q = firstLine.match(/^>\s*/);
+    const prefixLen = q ? q[0].length : 0;
+    return Math.max(0, off - prefixLen);
+  }
+  if (blockType === "list") {
+    const m = source.match(/^([-*]\s|\d+\.\s)/);
+    const prefixLen = m ? m[0].length : 0;
+    return Math.max(0, off - prefixLen);
+  }
+  return off;
+}
+
 export function getCaretOffset(editable) {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return 0;

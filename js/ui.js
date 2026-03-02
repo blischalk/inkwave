@@ -14,6 +14,7 @@ import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tab
 import { initTree, openFile, selectFile, createInFolder, refreshFolder } from "./filetree.js";
 import { saveToFile, saveOrSaveAs, flushActiveEditAndSave } from "./fileio.js";
 import { getBlocks, blocksToContent } from "./blocks.js";
+import { getBlockModeContentOffset } from "./vim.js";
 import { render } from "./renderer.js";
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -281,9 +282,21 @@ if (modeEditBtn)
 if (rawModeBtn) {
   rawModeBtn.addEventListener("click", () => {
     const newMode = !rawMode;
+    const tab = getActiveTab();
+    if (tab) {
+      if (newMode) {
+        // Switching to raw: save block-mode cursor so raw editor can restore it.
+        const offset = getBlockModeContentOffset();
+        if (offset != null) tab.savedCursorContentOffset = offset;
+      } else {
+        // Switching to block: save raw editor cursor so block view can restore it.
+        const rawEditor = contentEl && contentEl.querySelector(".raw-editor");
+        if (rawEditor && typeof rawEditor.selectionStart === "number")
+          tab.savedCursorContentOffset = rawEditor.selectionStart;
+      }
+    }
     setRawMode(newMode);
     rawModeBtn.setAttribute("aria-pressed", newMode ? "true" : "false");
-    const tab = getActiveTab();
     if (tab && onShowTabContent) onShowTabContent(tab);
   });
 }

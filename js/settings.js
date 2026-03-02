@@ -1,4 +1,4 @@
-import { vimMode, setVimMode } from "./state.js";
+import { vimMode, setVimMode, rawMode, contentEl } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
@@ -82,8 +82,17 @@ if (vimToggle) {
     saveSettings(settings);
     if (newVal) {
       initBlockNav();
+      // If we're in raw mode, the raw textarea is already visible; apply vim to it.
+      if (rawMode && contentEl) {
+        const rawEditor = contentEl.querySelector(".raw-editor");
+        if (rawEditor) applyVimMode(rawEditor);
+      }
     } else {
       clearBlockNav();
+      if (rawMode && contentEl) {
+        const rawEditor = contentEl.querySelector(".raw-editor");
+        if (rawEditor) removeVimMode(rawEditor);
+      }
     }
   });
 }

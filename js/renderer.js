@@ -5,7 +5,7 @@ import {
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
 } from "./state.js";
-import { initBlockNav, clearBlockNav, applyVimMode } from "./vim.js";
+import { initBlockNav, clearBlockNav, applyVimMode, placeVimCursorAtContentOffset, scrollRawCursorIntoView } from "./vim.js";
 import { escapeHtml, highlightCodeInContainer } from "./utils.js";
 import {
   blockRaw, getBlocks, blocksToContent,
@@ -142,6 +142,12 @@ export function showTabContent(tab, preferredBlocks) {
         saveToFile(tab);
       });
       clearBlockNav();
+      const cursorOffset = tab.savedCursorContentOffset;
+      if (typeof cursorOffset === "number" && cursorOffset >= 0 && cursorOffset <= contentStr.length) {
+        textarea.setSelectionRange(cursorOffset, cursorOffset);
+        scrollRawCursorIntoView(textarea);
+      }
+      delete tab.savedCursorContentOffset;
       if (vimMode) applyVimMode(textarea);
       textarea.focus();
       return;
@@ -217,10 +223,12 @@ export function showTabContent(tab, preferredBlocks) {
           continue;
         }
         const depth = typeof b === "object" && b.depth;
+        const isEmpty = !raw || String(raw).trim() === "";
         const typeClass =
           "md-block-" +
           escapeHtml(type) +
-          (type === "heading" && depth ? " md-block-heading-" + depth : "");
+          (type === "heading" && depth ? " md-block-heading-" + depth : "") +
+          (isEmpty ? " md-block-empty" : "");
         html +=
           '<div class="md-block ' +
           typeClass +
@@ -297,8 +305,16 @@ export function showTabContent(tab, preferredBlocks) {
         }, 0);
       }
     }
-    // Restore vim block-nav cursor after every render.
-    if (vimMode) requestAnimationFrame(() => initBlockNav());
+    // Restore cursor after render: at saved offset (raw→block) or init vim block nav.
+    requestAnimationFrame(() => {
+      const savedOffset = tab.savedCursorContentOffset;
+      if (savedOffset != null && typeof savedOffset === "number") {
+        placeVimCursorAtContentOffset(savedOffset);
+        delete tab.savedCursorContentOffset;
+      } else if (vimMode) {
+        initBlockNav();
+      }
+    });
   } finally {
     setReplacingContent(false);
   }
