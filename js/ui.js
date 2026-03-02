@@ -2,7 +2,7 @@ import {
   contentEl, filenameEl,
   sidebar, openBtn, openMenu, newFileBtn, copyBtn,
   treeContextMenu, newFileHereBtn, treeWrap, deleteFileBtn,
-  themePicker, focusBtn, focusExitBtn,
+  focusBtn, focusExitBtn,
   treeRoot,
   setActiveTabId,
   currentTabRef, currentBlocks, setCurrentBlocks, onShowTabContent,
@@ -18,18 +18,76 @@ import { getBlockModeContentOffset } from "./vim.js";
 import { render } from "./renderer.js";
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
+const themePickerWrap  = document.getElementById("themePickerWrap");
+const themePickerBtn   = document.getElementById("themePickerBtn");
+const themePickerLabel = document.getElementById("themePickerLabel");
+const themePickerList  = document.getElementById("themePickerList");
+const themeOptions     = themePickerList
+  ? [...themePickerList.querySelectorAll("li[data-value]")]
+  : [];
+
+let _committedTheme = null;
+let _focusedIndex   = -1;
+
 export function applyTheme(themeId) {
   document.body.setAttribute("data-theme", themeId);
-  themePicker.value = themeId;
+  const opt = themeOptions.find((li) => li.dataset.value === themeId);
+  if (themePickerLabel) themePickerLabel.textContent = opt ? opt.textContent : themeId;
+  themeOptions.forEach((li) =>
+    li.setAttribute("aria-selected", li.dataset.value === themeId ? "true" : "false"),
+  );
 }
 
-themePicker.addEventListener("change", function () {
-  applyTheme(this.value);
-  const a = getApi();
-  if (a && typeof a.save_setting === "function") {
-    a.save_setting("theme", this.value);
+function isPickerOpen() {
+  return themePickerList && !themePickerList.hidden;
+}
+
+function highlightOption(index, preview = true) {
+  themeOptions.forEach((li, i) => li.classList.toggle("focused", i === index));
+  if (index >= 0 && index < themeOptions.length) {
+    themeOptions[index].scrollIntoView({ block: "nearest" });
+    if (preview) applyTheme(themeOptions[index].dataset.value);
   }
-});
+}
+
+function openPicker() {
+  if (!themePickerList || !themePickerBtn) return;
+  _committedTheme = document.body.getAttribute("data-theme") || "obsidianite";
+  themePickerList.hidden = false;
+  themePickerBtn.setAttribute("aria-expanded", "true");
+  _focusedIndex = themeOptions.findIndex((li) => li.dataset.value === _committedTheme);
+  if (_focusedIndex < 0) _focusedIndex = 0;
+  highlightOption(_focusedIndex, false);
+}
+
+function closePicker(revert) {
+  if (!themePickerList || !themePickerBtn) return;
+  themePickerList.hidden = true;
+  themePickerBtn.setAttribute("aria-expanded", "false");
+  themeOptions.forEach((li) => li.classList.remove("focused"));
+  if (revert && _committedTheme) applyTheme(_committedTheme);
+}
+
+function commitOption(themeId) {
+  closePicker(false);
+  applyTheme(themeId);
+  if (themePickerBtn) themePickerBtn.focus();
+  const a = getApi();
+  if (a && typeof a.save_setting === "function") a.save_setting("theme", themeId);
+}
+
+if (themePickerBtn) {
+  themePickerBtn.addEventListener("click", () => {
+    isPickerOpen() ? closePicker(true) : openPicker();
+  });
+}
+
+if (themePickerList) {
+  themePickerList.addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-value]");
+    if (li) commitOption(li.dataset.value);
+  });
+}
 
 // ── Focus mode ────────────────────────────────────────────────────────────────
 export function setFocusMode(on) {
@@ -259,9 +317,12 @@ deleteFileBtn.addEventListener("click", () => {
     });
 });
 
-document.addEventListener("click", () => {
+document.addEventListener("click", (e) => {
   openMenu.classList.remove("visible");
   treeContextMenu.classList.remove("visible");
+  if (isPickerOpen() && themePickerWrap && !themePickerWrap.contains(e.target)) {
+    closePicker(true);
+  }
 });
 
 // ── Mode buttons (buttons not present in current HTML — kept for compatibility) ─
@@ -303,6 +364,31 @@ if (rawModeBtn) {
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
+  if (isPickerOpen()) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      _focusedIndex = Math.min(_focusedIndex + 1, themeOptions.length - 1);
+      highlightOption(_focusedIndex);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      _focusedIndex = Math.max(_focusedIndex - 1, 0);
+      highlightOption(_focusedIndex);
+      return;
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (_focusedIndex >= 0) commitOption(themeOptions[_focusedIndex].dataset.value);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closePicker(true);
+      if (themePickerBtn) themePickerBtn.focus();
+      return;
+    }
+  }
   if (e.key === "Escape" && isFocusMode()) {
     setFocusMode(false);
     e.preventDefault();

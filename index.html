@@ -137,28 +137,33 @@
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
             </button>
-            <label class="theme-label">
+            <div class="theme-label">
                 Theme
-                <select
-                    class="theme-picker"
-                    id="themePicker"
-                    title="Choose reading theme"
-                >
-                    <option value="dracula">Dracula</option>
-                    <option value="forest">Forest</option>
-                    <option value="midnight">Midnight</option>
-                    <option value="gruvbox">Gruvbox</option>
-                    <option value="high-contrast">High contrast</option>
-                    <option value="lavender">Lavender</option>
-                    <option value="mocha">Mocha</option>
-                    <option value="nord">Nord</option>
-                    <option value="obsidianite">Obsidianite</option>
-                    <option value="paper">Paper</option>
-                    <option value="rose-pine">Rose Pine</option>
-                    <option value="sepia">Sepia</option>
-                    <option value="solarized-light">Solarized Light</option>
-                </select>
-            </label>
+                <div class="theme-picker-wrap" id="themePickerWrap">
+                    <button type="button" class="theme-picker-btn" id="themePickerBtn"
+                            aria-haspopup="listbox" aria-expanded="false" title="Choose reading theme">
+                        <span id="themePickerLabel">Obsidianite</span>
+                        <svg class="theme-picker-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <ul class="theme-picker-list" id="themePickerList" role="listbox" aria-label="Choose theme" hidden>
+                        <li role="option" data-value="dracula">Dracula</li>
+                        <li role="option" data-value="forest">Forest</li>
+                        <li role="option" data-value="midnight">Midnight</li>
+                        <li role="option" data-value="gruvbox">Gruvbox</li>
+                        <li role="option" data-value="high-contrast">High contrast</li>
+                        <li role="option" data-value="lavender">Lavender</li>
+                        <li role="option" data-value="mocha">Mocha</li>
+                        <li role="option" data-value="nord">Nord</li>
+                        <li role="option" data-value="obsidianite">Obsidianite</li>
+                        <li role="option" data-value="paper">Paper</li>
+                        <li role="option" data-value="rose-pine">Rose Pine</li>
+                        <li role="option" data-value="sepia">Sepia</li>
+                        <li role="option" data-value="solarized-light">Solarized Light</li>
+                    </ul>
+                </div>
+            </div>
             <span class="filename" id="filename"></span>
         </div>
         <div class="tab-bar hidden" id="tabBar">

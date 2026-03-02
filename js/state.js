@@ -46,7 +46,6 @@ export const newFileHereBtn  = document.getElementById("newFileHereBtn");
 export const treeWrap        = document.querySelector(".tree-wrap");
 export const deleteFileBtn   = document.getElementById("deleteFileBtn");
 export const tabBarEl        = document.getElementById("tabBar");
-export const themePicker     = document.getElementById("themePicker");
 export const copyBtn         = document.getElementById("copyBtn");
 export const rawModeBtn      = document.getElementById("rawModeBtn");
 export const focusBtn        = document.getElementById("focusBtn");

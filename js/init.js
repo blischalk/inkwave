@@ -1,5 +1,5 @@
 import {
-  contentEl, filenameEl, themePicker,
+  contentEl, filenameEl,
   setWelcomeContent,
 } from "./state.js";
 import { getApi } from "./api.js";
@@ -11,11 +11,7 @@ import { applyTheme } from "./ui.js";
 window.__applySettings = function (dataStr) {
   try {
     const settings = JSON.parse(dataStr);
-    if (
-      settings &&
-      settings.theme &&
-      themePicker.querySelector('option[value="' + settings.theme + '"]')
-    ) {
+    if (settings && settings.theme) {
       applyTheme(settings.theme);
     }
   } catch (e) {}
