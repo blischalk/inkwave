@@ -1,9 +1,10 @@
 import { contentEl } from "./state.js";
 import { escapeHtml } from "./utils.js";
 
-const tocPanel = document.getElementById("tocPanel");
-const tocBody  = document.getElementById("tocBody");
-const tocBtn   = document.getElementById("tocBtn");
+const tocPanel    = document.getElementById("tocPanel");
+const tocBody     = document.getElementById("tocBody");
+const tocBtn      = document.getElementById("tocBtn");
+const focusTocBtn = document.getElementById("focusTocBtn");
 const tocCloseBtn = document.getElementById("tocCloseBtn");
 
 let tocVisible = false;
@@ -51,6 +52,7 @@ function showToc() {
   tocVisible = true;
   if (tocPanel) tocPanel.classList.add("visible");
   if (tocBtn) tocBtn.setAttribute("aria-pressed", "true");
+  if (focusTocBtn) focusTocBtn.setAttribute("aria-pressed", "true");
   renderToc();
 }
 
@@ -58,6 +60,7 @@ function hideToc() {
   tocVisible = false;
   if (tocPanel) tocPanel.classList.remove("visible");
   if (tocBtn) tocBtn.setAttribute("aria-pressed", "false");
+  if (focusTocBtn) focusTocBtn.setAttribute("aria-pressed", "false");
 }
 
 export function toggleToc() {
@@ -74,6 +77,9 @@ if (contentEl) {
 
 if (tocBtn) {
   tocBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleToc(); });
+}
+if (focusTocBtn) {
+  focusTocBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleToc(); });
 }
 if (tocCloseBtn) {
   tocCloseBtn.addEventListener("click", hideToc);

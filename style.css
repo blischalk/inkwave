@@ -403,12 +403,12 @@ body[data-focus-mode="true"] .content-area {
 body[data-focus-mode="true"] .content {
   padding: 48px 64px 80px;
 }
-.focus-exit {
+.focus-exit,
+.focus-toc-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   position: fixed;
-  top: 16px;
   right: 16px;
   z-index: 50;
   width: 40px;
@@ -425,7 +425,10 @@ body[data-focus-mode="true"] .content {
   pointer-events: none;
   transition: opacity 0.3s ease, visibility 0.3s ease, color 0.2s ease;
 }
-.focus-exit svg {
+.focus-exit { top: 16px; }
+.focus-toc-btn { top: 64px; }
+.focus-exit svg,
+.focus-toc-btn svg {
   width: 20px;
   height: 20px;
   stroke: currentColor;
@@ -434,13 +437,17 @@ body[data-focus-mode="true"] .content {
   stroke-linejoin: round;
   stroke-width: 2.25;
 }
-.focus-exit:hover { color: var(--accent); }
-body[data-focus-mode="true"] .focus-exit {
+.focus-exit:hover,
+.focus-toc-btn:hover { color: var(--accent); }
+.focus-toc-btn[aria-pressed="true"] { color: var(--accent); }
+body[data-focus-mode="true"] .focus-exit,
+body[data-focus-mode="true"] .focus-toc-btn {
   opacity: 0.9;
   visibility: visible;
   pointer-events: auto;
 }
-body[data-focus-mode="true"] .focus-exit:hover { opacity: 1; }
+body[data-focus-mode="true"] .focus-exit:hover,
+body[data-focus-mode="true"] .focus-toc-btn:hover { opacity: 1; }
 
 .content-area {
   flex: 1;

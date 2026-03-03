@@ -35,20 +35,27 @@ There are no tests and no linting configuration.
 - `read_file(path)` — returns `{path, content}`
 - `write_file(path, content)` — returns `{path}`
 - `create_file(folder_path, filename)` — returns `{path, content}`
+- `save_image(md_file_path, filename, base64_content)` — saves a dropped image alongside the markdown file, returns `{name}`
+- `save_as(suggested_name)` — save-as dialog, returns `{path}`
 - `delete_file(path)` — returns `{success}`
 - `get_welcome()` — returns bundled `Welcome.md` content
+- `load_settings()` — returns persisted settings as a JSON string
+- `save_setting(key, value)` — persists a single setting key/value
 - `toggle_fullscreen()` — toggles native window fullscreen
 
 ### Frontend (`js/`)
 
-The UI is vanilla JS modules under `js/`. Entry point is `js/main.js` (loaded by `index.html`). Import order: state → debug/api/utils/blocks/caret → tabs/fileio → renderer/editor → filetree/ui/init. Key concepts:
+The UI is vanilla JS modules under `js/`. Entry point is `js/main.js` (loaded by `index.html`). Import order: state → debug/api/utils/blocks/caret → tabs/fileio → editor (before renderer, so inline-edit keydown runs first) → renderer → filetree/ui/toc/vim/settings/init. Key concepts:
 
 - **Tabs**: each open file is a tab (`tabs` array, `activeTabId`). Tab state holds `path`, `blocks`, and edit state.
 - **Blocks**: content is parsed into an array of block objects (`getBlocks()`). Each block has `{type, raw}`. Types include `heading`, `paragraph`, `code`, `list-item`, `blockquote`, `hr`, `blank`.
-- **Inline editing**: clicking a rendered block switches it to a contenteditable `<div>`. On blur/Enter, edits are committed back to the blocks array and saved. List items get special handling for their markers.
+- **Inline editing**: double-clicking a rendered block switches it to a contenteditable `<div>`. On blur/Enter, edits are committed back to the blocks array and saved. List items get special handling for their markers.
 - **Autosave**: edits are autosaved to disk via `write_file` after each committed change.
 - **File tree**: sidebar renders a lazy-loading tree of dirs and `.md`/`.markdown` files using `list_dir`. Tree state (expanded folders) is tracked in `loadedChildren` Map.
-- **Themes**: 12 CSS themes toggled via `<select>`. The active theme is stored as a `data-theme` attribute on `<body>` and persisted in `localStorage`.
+- **Themes**: 13 CSS themes selected via a custom dropdown (button + `<ul>` list). The active theme is stored as a `data-theme` attribute on `<body>` and persisted via `save_setting`.
+- **Vim mode**: optional vim keybindings toggled in Settings. Block mode uses a fake blinking cursor div over browser Selection; raw mode uses a full `VimSession` class on the textarea. Shared yank register between both modes.
+- **Raw mode**: toggle renders the full file as a `<textarea>` instead of parsed blocks.
+- **Table of contents**: TOC panel slides in from the right, populated from heading blocks in the current content.
 
 ### CSS (`style.css`)
 
@@ -65,7 +72,19 @@ All theming uses CSS custom properties (`--bg`, `--text`, `--accent`, `--toolbar
 |------|---------|
 | `app.py` | Python entry point; pywebview window creation; `Api` class for all file I/O |
 | `index.html` | App shell; loads CDN scripts (marked.js, highlight.js) and `js/main.js` |
-| `js/main.js` | Entry point; imports state, api, blocks, tabs, fileio, renderer, editor, filetree, ui, init |
+| `js/main.js` | Entry point; imports all modules in dependency order |
+| `js/state.js` | Mutable shared state, DOM element refs, SVG icons, callback slots for circular-dep breaking |
+| `js/editor.js` | Inline block editing: `startInlineEdit`, Enter/blur commit, keydown handlers |
+| `js/renderer.js` | `showTabContent` (block render), `showWelcomeOrEmpty`, image resize wiring |
+| `js/vim.js` | Vim keybindings: block-mode nav/commands + `VimSession` class for raw textarea |
+| `js/ui.js` | Theme picker, focus mode, toolbar buttons, drag-and-drop, global keyboard shortcuts |
+| `js/toc.js` | Table of contents panel: heading extraction, render, toggle |
+| `js/settings.js` | Settings modal: vim mode toggle, persisted settings load/save |
+| `js/blocks.js` | `getBlocks`, `blocksToContent`, block type helpers |
+| `js/tabs.js` | Tab CRUD, `renderTabBar`, `getActiveTab` |
+| `js/filetree.js` | File tree: lazy-loading dir expansion, file open/select/create/delete |
+| `js/fileio.js` | `saveToFile`, `saveOrSaveAs`, `flushActiveEditAndSave` |
+| `js/init.js` | `loadWelcome`, `whenApiReady`, `window.__applySettings`/`__applyWelcome` hooks |
 | `style.css` | All styles and theme definitions via CSS custom properties |
 | `Welcome.md` | Bundled welcome screen content, loaded by `get_welcome()` at startup |
 | `requirements.txt` | Single dependency: `pywebview>=4.0` |
