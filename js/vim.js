@@ -43,7 +43,19 @@ function positionFakeCursor() {
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) { hideFakeCursor(); return; }
   const range = sel.getRangeAt(0);
-  let vRect = range.getBoundingClientRect(); // viewport-relative
+  let vRect;
+  // In visual mode, size the cursor from just the focus point — not the full
+  // selection bounding box, which spans the entire selection height.
+  if (blockVisualMode && sel.focusNode) {
+    try {
+      const fr = document.createRange();
+      fr.setStart(sel.focusNode, sel.focusOffset);
+      fr.collapse(true);
+      const r = fr.getBoundingClientRect();
+      if (r && r.height > 0) vRect = r;
+    } catch (_) {}
+  }
+  if (!vRect) vRect = range.getBoundingClientRect(); // viewport-relative
 
   // Empty blocks produce a zero-height caret rect.  Fall back to the block
   // element's own rect so the cursor remains visible on a freshly-opened line.
@@ -100,7 +112,9 @@ let lastBlockIndex = 0;
 let preferredX     = null; // column preserved across j/k runs
 let blockNavPending = "";
 let blockVisualMode = false;
-let blockVisualAnchor = null; // { node, offset } when in block visual
+let blockVisualAnchor = null; // { node, offset, blockIndex } when in block visual
+let blockVisualRange  = null; // { topIdx, botIdx } — updated by extendBlockVisual
+const visualOverlayEls = [];  // absolutely-positioned highlight divs for visual selection
 /** Shared yank register: set by block-mode or raw-mode yank, used by raw-mode paste and inline-edit paste. */
 let sharedYank = "";
 let sharedYankBlock = false;
@@ -134,6 +148,8 @@ function yankCurrentBlock() {
 
 function deleteCurrentBlock() {
   if (!currentBlocks.length || !currentTabRef) return;
+  clearVisualHighlights();
+  blockVisualMode = false; blockVisualAnchor = null;
   yankCurrentBlock();
   pushBlockUndo();
   const idx = Math.max(0, Math.min(lastBlockIndex, currentBlocks.length - 1));
@@ -459,6 +475,7 @@ export function initBlockNav(preferBlockIndex) {
 
 export function clearBlockNav() {
   hideFakeCursor();
+  clearVisualHighlights();
   const sel = window.getSelection();
   if (sel) sel.removeAllRanges();
   lastBlockIndex = 0; preferredX = null; blockNavPending = "";
@@ -607,6 +624,7 @@ document.addEventListener("keydown", (e) => {
   if (blockVisualMode) {
     if (e.key === "Escape") {
       e.preventDefault();
+      clearVisualHighlights();
       blockVisualMode = false;
       blockVisualAnchor = null;
       const sel = window.getSelection();
@@ -622,21 +640,95 @@ document.addEventListener("keydown", (e) => {
     }
     if (e.key === "y") {
       e.preventDefault();
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        // Collect raw markdown from selected blocks so paste re-renders correctly.
-        const range = sel.getRangeAt(0);
-        const blockEls = contentEl ? contentEl.querySelectorAll(".md-block") : [];
+      if (blockVisualRange && currentBlocks && contentEl) {
+        const { topIdx, botIdx } = blockVisualRange;
+        const sel        = window.getSelection();
+        const focusNode  = sel?.focusNode  ?? null;
+        const focusOff   = sel?.focusOffset ?? 0;
+        const anchorIdx  = blockVisualAnchor.blockIndex;
+        const isForward  = anchorIdx <= topIdx || topIdx === botIdx;
         const selectedRaw = [];
-        for (let i = 0; i < blockEls.length; i++) {
-          const blkEl = blockEls[i];
-          const idx = parseInt(blkEl.getAttribute("data-block-index"), 10);
-          if (isNaN(idx) || !currentBlocks[idx]) continue;
-          try { if (range.intersectsNode(blkEl)) selectedRaw.push(currentBlocks[idx].raw || ""); } catch (_) {}
+
+        // Returns block.raw when the range covers the full rendered text of the
+        // block (preserving markdown like ## or **bold**), otherwise the partial
+        // rendered text (for selections that end mid-block).
+        function yankBlockRange(blockIdx, startNode, startOff, endNode, endOff) {
+          const blockEl = contentEl.querySelector(`.md-block[data-block-index="${blockIdx}"]`);
+          if (!blockEl || !currentBlocks[blockIdx]) return;
+          try {
+            const full = document.createRange();
+            full.selectNodeContents(blockEl);
+            const r = document.createRange();
+            r.setStart(startNode, startOff);
+            r.setEnd(endNode, endOff);
+            const partial = r.toString();
+            if (partial.trim() === full.toString().trim()) {
+              selectedRaw.push(currentBlocks[blockIdx].raw || "");
+            } else if (partial) {
+              selectedRaw.push(partial);
+            }
+          } catch (_) {
+            selectedRaw.push(currentBlocks[blockIdx].raw || "");
+          }
         }
-        sharedYank = selectedRaw.length > 0 ? selectedRaw.join("\n\n") : sel.toString();
-        sharedYankBlock = false;
+
+        if (topIdx === botIdx) {
+          // Same block: compare selection against full block to decide raw vs partial.
+          const blockEl = contentEl.querySelector(`.md-block[data-block-index="${topIdx}"]`);
+          if (blockEl && focusNode) {
+            yankBlockRange(topIdx,
+              blockVisualAnchor.node, blockVisualAnchor.offset,
+              focusNode, focusOff);
+          } else if (currentBlocks[topIdx]) {
+            selectedRaw.push(currentBlocks[topIdx].raw || "");
+          }
+        } else {
+          // Top boundary block
+          const topEl = contentEl.querySelector(`.md-block[data-block-index="${topIdx}"]`);
+          if (topEl) {
+            try {
+              const full = document.createRange();
+              full.selectNodeContents(topEl);
+              if (isForward) {
+                yankBlockRange(topIdx, blockVisualAnchor.node, blockVisualAnchor.offset,
+                  full.endContainer, full.endOffset);
+              } else {
+                yankBlockRange(topIdx, focusNode, focusOff,
+                  full.endContainer, full.endOffset);
+              }
+            } catch (_) {
+              if (currentBlocks[topIdx]) selectedRaw.push(currentBlocks[topIdx].raw || "");
+            }
+          }
+          // Middle blocks: always full raw
+          for (let i = topIdx + 1; i < botIdx; i++) {
+            if (currentBlocks[i]) selectedRaw.push(currentBlocks[i].raw || "");
+          }
+          // Bottom boundary block
+          const botEl = contentEl.querySelector(`.md-block[data-block-index="${botIdx}"]`);
+          if (botEl) {
+            try {
+              const full = document.createRange();
+              full.selectNodeContents(botEl);
+              if (isForward) {
+                yankBlockRange(botIdx, full.startContainer, full.startOffset,
+                  focusNode, focusOff);
+              } else {
+                yankBlockRange(botIdx, full.startContainer, full.startOffset,
+                  blockVisualAnchor.node, blockVisualAnchor.offset);
+              }
+            } catch (_) {
+              if (currentBlocks[botIdx]) selectedRaw.push(currentBlocks[botIdx].raw || "");
+            }
+          }
+        }
+        sharedYank = selectedRaw.filter(r => r !== "").join("\n\n");
+      } else {
+        const sel = window.getSelection();
+        sharedYank = sel ? sel.toString() : "";
       }
+      sharedYankBlock = false;
+      clearVisualHighlights();
       blockVisualMode = false;
       blockVisualAnchor = null;
       const sel2 = window.getSelection();
@@ -657,6 +749,7 @@ document.addEventListener("keydown", (e) => {
     case "V":
       e.preventDefault();
       if (blockVisualMode) {
+        clearVisualHighlights();
         blockVisualMode = false;
         blockVisualAnchor = null;
         const s = window.getSelection();
@@ -674,7 +767,8 @@ document.addEventListener("keydown", (e) => {
         if (sel && sel.rangeCount) {
           const r = sel.getRangeAt(0);
           blockVisualMode = true;
-          blockVisualAnchor = { node: r.startContainer, offset: r.startOffset };
+          blockVisualAnchor = { node: r.startContainer, offset: r.startOffset, blockIndex: lastBlockIndex };
+          blockVisualRange  = { topIdx: lastBlockIndex, botIdx: lastBlockIndex };
           setStatus("-- VISUAL --");
         }
       }
@@ -703,7 +797,7 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault(); placeAtContentEnd(); positionFakeCursor(); scrollToCursor(); if (blockVisualMode) extendBlockVisual(); setStatus(blockVisualMode ? "-- VISUAL --" : "-- NORMAL --"); break;
 
     case "i":
-      e.preventDefault(); blockVisualMode = false; blockVisualAnchor = null; ensureCursorInitialized(); enterInsertAtCursor(); break;
+      e.preventDefault(); clearVisualHighlights(); blockVisualMode = false; blockVisualAnchor = null; ensureCursorInitialized(); enterInsertAtCursor(); break;
     case "a":
       e.preventDefault(); ensureCursorInitialized();
       moveChar(true); enterInsertAtCursor(); break;
@@ -739,7 +833,7 @@ document.addEventListener("keydown", (e) => {
 
     case "o": {
       e.preventDefault();
-      blockVisualMode = false; blockVisualAnchor = null;
+      clearVisualHighlights(); blockVisualMode = false; blockVisualAnchor = null;
       ensureCursorInitialized();
       pushBlockUndo();
       const oIdx = lastBlockIndex;
@@ -792,24 +886,113 @@ document.addEventListener("keydown", (e) => {
     }
 
     case "Escape":
-      e.preventDefault(); blockNavPending = ""; blockVisualMode = false; blockVisualAnchor = null; setStatus("-- NORMAL --"); break;
+      e.preventDefault(); blockNavPending = ""; clearVisualHighlights(); blockVisualMode = false; blockVisualAnchor = null; setStatus("-- NORMAL --"); break;
 
     default: break;
   }
 }, true);
 
+function clearVisualHighlights() {
+  if (contentEl) {
+    contentEl.querySelectorAll(".md-block.vim-visual-hl")
+      .forEach(el => el.classList.remove("vim-visual-hl"));
+  }
+  visualOverlayEls.forEach(el => el.remove());
+  visualOverlayEls.length = 0;
+  blockVisualRange = null;
+}
+
+function addHighlightRects(range) {
+  if (!contentEl) return;
+  const ceRect = contentEl.getBoundingClientRect();
+  for (const rect of range.getClientRects()) {
+    if (rect.width < 1 || rect.height < 1) continue;
+    const div = document.createElement("div");
+    div.className = "vim-visual-overlay";
+    div.setAttribute("aria-hidden", "true");
+    div.style.left   = (rect.left - ceRect.left + contentEl.scrollLeft) + "px";
+    div.style.top    = (rect.top  - ceRect.top  + contentEl.scrollTop)  + "px";
+    div.style.width  = rect.width  + "px";
+    div.style.height = rect.height + "px";
+    contentEl.appendChild(div);
+    visualOverlayEls.push(div);
+  }
+}
+
 function extendBlockVisual() {
+  if (!blockVisualAnchor || !contentEl) { positionFakeCursor(); return; }
   const sel = window.getSelection();
-  if (!sel || !sel.rangeCount || !blockVisualAnchor) return;
-  const cur = sel.getRangeAt(0);
-  try {
-    // setBaseAndExtent keeps anchor fixed and extends focus to current cursor,
-    // giving character-granular selection without browser range normalisation.
-    sel.setBaseAndExtent(
-      blockVisualAnchor.node, blockVisualAnchor.offset,
-      cur.startContainer, cur.startOffset,
-    );
-  } catch (_) {}
+  if (!sel || !sel.rangeCount) { positionFakeCursor(); return; }
+
+  clearVisualHighlights();
+
+  const anchorBlockIdx = blockVisualAnchor.blockIndex ?? lastBlockIndex;
+  const focusBlockIdx  = lastBlockIndex;
+  const focusNode      = sel.focusNode;
+  const focusOffset    = sel.focusOffset;
+
+  if (anchorBlockIdx === focusBlockIdx) {
+    // Same block: native browser selection — precise, no cross-block gap rectangles.
+    blockVisualRange = { topIdx: anchorBlockIdx, botIdx: anchorBlockIdx };
+    try {
+      sel.setBaseAndExtent(
+        blockVisualAnchor.node, blockVisualAnchor.offset,
+        focusNode, focusOffset,
+      );
+    } catch (_) {}
+    positionFakeCursor();
+    return;
+  }
+
+  // Multi-block: keep selection collapsed, render highlights manually.
+  sel.collapse(focusNode, focusOffset);
+
+  const isForward   = focusBlockIdx > anchorBlockIdx;
+  const topBlockIdx = isForward ? anchorBlockIdx : focusBlockIdx;
+  const botBlockIdx = isForward ? focusBlockIdx  : anchorBlockIdx;
+  blockVisualRange  = { topIdx: topBlockIdx, botIdx: botBlockIdx };
+
+  // Middle blocks: full background highlight.
+  contentEl.querySelectorAll(".md-block").forEach(el => {
+    const idx = parseInt(el.getAttribute("data-block-index"), 10);
+    if (!isNaN(idx) && idx > topBlockIdx && idx < botBlockIdx)
+      el.classList.add("vim-visual-hl");
+  });
+
+  // Top partial block: from anchor/focus point to end of block.
+  const topBlockEl = contentEl.querySelector(`.md-block[data-block-index="${topBlockIdx}"]`);
+  if (topBlockEl) {
+    try {
+      const full = document.createRange();
+      full.selectNodeContents(topBlockEl);
+      const r = document.createRange();
+      if (isForward) {
+        r.setStart(blockVisualAnchor.node, blockVisualAnchor.offset);
+      } else {
+        r.setStart(focusNode, focusOffset);
+      }
+      r.setEnd(full.endContainer, full.endOffset);
+      addHighlightRects(r);
+    } catch (_) {}
+  }
+
+  // Bottom partial block: from start of block to anchor/focus point.
+  const botBlockEl = contentEl.querySelector(`.md-block[data-block-index="${botBlockIdx}"]`);
+  if (botBlockEl) {
+    try {
+      const full = document.createRange();
+      full.selectNodeContents(botBlockEl);
+      const r = document.createRange();
+      r.setStart(full.startContainer, full.startOffset);
+      if (isForward) {
+        r.setEnd(focusNode, focusOffset);
+      } else {
+        r.setEnd(blockVisualAnchor.node, blockVisualAnchor.offset);
+      }
+      addHighlightRects(r);
+    } catch (_) {}
+  }
+
   positionFakeCursor();
 }
 

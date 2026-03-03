@@ -1038,6 +1038,16 @@ body[data-debug="true"] .debug-panel { display: block; }
   z-index: 9999;
   animation: vim-cursor-blink 1.2s step-start infinite;
 }
+.md-block.vim-visual-hl {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.vim-visual-overlay {
+  position: absolute;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 2px;
+}
 @keyframes vim-cursor-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
