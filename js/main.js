@@ -14,6 +14,7 @@ import "./renderer.js";   // registers onShowTabContent + onShowWelcomeOrEmpty
 import "./filetree.js";
 import "./ui.js";
 import "./toc.js";
+import "./chat.js";
 import "./vim.js";
 import "./settings.js";
 

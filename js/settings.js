@@ -2,10 +2,19 @@ import { vimMode, setVimMode, rawMode, contentEl } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
-const settingsBtn   = document.getElementById("settingsBtn");
-const settingsModal = document.getElementById("settingsModal");
+const settingsBtn      = document.getElementById("settingsBtn");
+const settingsModal    = document.getElementById("settingsModal");
 const settingsCloseBtn = document.getElementById("settingsCloseBtn");
-const vimToggle     = document.getElementById("vimModeToggle");
+const vimToggle        = document.getElementById("vimModeToggle");
+
+// API key elements
+const apiKeySetBtn    = document.getElementById("apiKeySetBtn");
+const apiKeyDeleteBtn = document.getElementById("apiKeyDeleteBtn");
+const apiKeyEntry     = document.getElementById("apiKeyEntry");
+const apiKeyInput     = document.getElementById("apiKeyInput");
+const apiKeySaveBtn   = document.getElementById("apiKeySaveBtn");
+const apiKeyCancelBtn = document.getElementById("apiKeyCancelBtn");
+const apiKeyStatus    = document.getElementById("apiKeyStatus");
 
 const STORAGE_KEY = "inkwave_settings";
 
@@ -34,6 +43,33 @@ export function initSettings() {
     if (vimToggle) { vimToggle.checked = true; vimToggle.setAttribute("aria-checked", "true"); }
     // initBlockNav is called by renderer.js after content renders; no need to call here.
   }
+  loadApiKeyStatus();
+}
+
+async function loadApiKeyStatus() {
+  const api = getApi();
+  if (!api || typeof api.get_api_key_status !== "function") return;
+  try {
+    const result = await api.get_api_key_status();
+    updateApiKeyUI(result && result.has_key);
+  } catch {
+    updateApiKeyUI(false);
+  }
+}
+
+function updateApiKeyUI(hasKey) {
+  if (apiKeyStatus) {
+    apiKeyStatus.textContent = hasKey ? "Key saved" : "Not set";
+    apiKeyStatus.style.color = hasKey ? "var(--accent)" : "";
+  }
+  if (apiKeySetBtn) apiKeySetBtn.textContent = hasKey ? "Replace" : "Set key";
+  if (apiKeyDeleteBtn) {
+    if (hasKey) {
+      apiKeyDeleteBtn.removeAttribute("hidden");
+    } else {
+      apiKeyDeleteBtn.setAttribute("hidden", "");
+    }
+  }
 }
 
 function openSettings() {
@@ -45,6 +81,8 @@ function openSettings() {
   }
   settingsModal.hidden = false;
   settingsModal.removeAttribute("hidden");
+  // Refresh API key status each time settings opens (in case it changed)
+  loadApiKeyStatus();
 }
 
 function closeSettings() {
@@ -71,6 +109,58 @@ document.addEventListener("keydown", (e) => {
     e.stopPropagation();
   }
 });
+
+// API key button wiring
+if (apiKeySetBtn) {
+  apiKeySetBtn.addEventListener("click", () => {
+    if (apiKeyEntry) {
+      apiKeyEntry.removeAttribute("hidden");
+      if (apiKeyInput) { apiKeyInput.value = ""; apiKeyInput.focus(); }
+    }
+  });
+}
+if (apiKeyCancelBtn) {
+  apiKeyCancelBtn.addEventListener("click", () => {
+    if (apiKeyEntry) apiKeyEntry.setAttribute("hidden", "");
+    if (apiKeyInput) apiKeyInput.value = "";
+  });
+}
+if (apiKeySaveBtn) {
+  apiKeySaveBtn.addEventListener("click", async () => {
+    const key = apiKeyInput ? apiKeyInput.value.trim() : "";
+    if (!key) return;
+    const api = getApi();
+    if (!api) return;
+    try {
+      const result = await api.save_api_key(key);
+      if (result && result.ok) {
+        if (apiKeyEntry) apiKeyEntry.setAttribute("hidden", "");
+        if (apiKeyInput) apiKeyInput.value = "";
+        updateApiKeyUI(true);
+      } else {
+        if (apiKeyStatus) {
+          apiKeyStatus.textContent = result && result.error ? result.error : "Save failed";
+          apiKeyStatus.style.color = "var(--error, #f95959)";
+        }
+      }
+    } catch {
+      if (apiKeyStatus) {
+        apiKeyStatus.textContent = "Save failed";
+        apiKeyStatus.style.color = "var(--error, #f95959)";
+      }
+    }
+  });
+}
+if (apiKeyDeleteBtn) {
+  apiKeyDeleteBtn.addEventListener("click", async () => {
+    const api = getApi();
+    if (!api) return;
+    try {
+      await api.delete_api_key();
+    } catch { /* ignore */ }
+    updateApiKeyUI(false);
+  });
+}
 
 if (vimToggle) {
   vimToggle.addEventListener("change", () => {

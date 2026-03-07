@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl,
-  setWelcomeContent,
+  setWelcomeContent, setVimMode,
 } from "./state.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
@@ -13,6 +13,11 @@ window.__applySettings = function (dataStr) {
     const settings = JSON.parse(dataStr);
     if (settings && settings.theme) {
       applyTheme(settings.theme);
+    }
+    if (settings && settings.vimMode === "true") {
+      setVimMode(true);
+      const toggle = document.getElementById("vimModeToggle");
+      if (toggle) { toggle.checked = true; toggle.setAttribute("aria-checked", "true"); }
     }
   } catch (e) {}
 };

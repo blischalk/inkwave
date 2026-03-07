@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import threading
 
 # Prefer Edge (WebView2) on Windows to avoid WinForms/pythonnet errors.
 # Must set before importing webview so the correct GUI backend is chosen.
@@ -15,6 +16,53 @@ if os.name == "nt":
     os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
 
 import webview
+
+try:
+    import anthropic as _anthropic
+    _ANTHROPIC_AVAILABLE = True
+except ImportError:
+    _ANTHROPIC_AVAILABLE = False
+
+try:
+    import keyring as _keyring
+    _KEYRING_AVAILABLE = True
+except ImportError:
+    _KEYRING_AVAILABLE = False
+
+_KEYRING_SERVICE  = "Inkwave"
+_KEYRING_USERNAME = "anthropic_api_key"
+
+
+def _build_system_prompt(file_contexts):
+    open_dir = None
+    files = []
+    if isinstance(file_contexts, dict):
+        open_dir = file_contexts.get("openDirectory")
+        files = file_contexts.get("files") or []
+    elif isinstance(file_contexts, list):
+        files = file_contexts
+
+    base = """You are Claude, an AI assistant embedded in Inkwave, a Markdown editor.
+
+## File Change Protocol
+When asked to modify or create a file, wrap the COMPLETE file content in:
+<file-change path="/absolute/path/to/file.md">
+full file content here
+</file-change>
+Rules: always full content (no diffs), use absolute paths, explain changes after the XML.
+
+"""
+    if open_dir:
+        base += f"## Open Directory\n{open_dir}\n\nWhen creating new files, save them in this directory unless the user specifies otherwise.\n\n"
+
+    base += "## Open Files\n"
+    if not files:
+        base += "No files open.\n"
+    else:
+        for fc in files:
+            base += f'### {fc.get("path") or "(unsaved)"}\n\n```markdown\n{fc.get("content","")}\n```\n\n'
+    return base.strip()
+
 
 # Directory where this script lives (for loading index.html)
 # When frozen by PyInstaller, data files are in sys._MEIPASS (temp extraction dir).
@@ -312,6 +360,88 @@ class Api:
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    # ── Claude AI API key management ──────────────────────────────────────────
+
+    def save_api_key(self, key):
+        """Store Anthropic API key in OS keychain. Returns {ok: bool, error?}."""
+        if not _KEYRING_AVAILABLE:
+            return {"ok": False, "error": "keyring package not available"}
+        try:
+            _keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, key)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_api_key_status(self):
+        """Returns {has_key: bool} — never exposes the key value."""
+        if not _KEYRING_AVAILABLE:
+            return {"has_key": False}
+        try:
+            val = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+            return {"has_key": bool(val)}
+        except Exception:
+            return {"has_key": False}
+
+    def delete_api_key(self):
+        """Remove API key from OS keychain. Returns {ok: bool}."""
+        if not _KEYRING_AVAILABLE:
+            return {"ok": False, "error": "keyring package not available"}
+        try:
+            _keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def chat(self, messages, file_contexts):
+        """Start a streaming Claude chat in a background thread. Returns {ok: True} immediately."""
+        if not _ANTHROPIC_AVAILABLE:
+            return {"ok": False, "error": "anthropic package not available"}
+        if not _KEYRING_AVAILABLE:
+            return {"ok": False, "error": "no_api_key"}
+        try:
+            api_key = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+        except Exception:
+            api_key = None
+        if not api_key:
+            return {"ok": False, "error": "no_api_key"}
+
+        system_prompt = _build_system_prompt(file_contexts or [])
+
+        def _stream():
+            try:
+                client = _anthropic.Anthropic(api_key=api_key)
+                with client.messages.stream(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=messages,
+                ) as stream:
+                    for text_chunk in stream.text_stream:
+                        self._push_js(f"window.__chatChunk({json.dumps(text_chunk)})")
+                self._push_js("window.__chatDone()")
+            except Exception as e:
+                err_type = type(e).__name__
+                if "AuthenticationError" in err_type:
+                    msg = "Authentication failed. Check your API key in Settings."
+                elif "RateLimitError" in err_type:
+                    msg = "Rate limit reached. Please wait a moment and try again."
+                elif "APIConnectionError" in err_type:
+                    msg = "Connection error. Check your internet connection."
+                else:
+                    msg = str(e)
+                self._push_js(f"window.__chatError({json.dumps(msg)})")
+
+        t = threading.Thread(target=_stream, daemon=True)
+        t.start()
+        return {"ok": True}
+
+    def _push_js(self, js_string):
+        """Evaluate JS in the window; silently ignore if window is gone."""
+        try:
+            self._window.evaluate_js(js_string)
+        except Exception:
+            pass
 
 
 def main():

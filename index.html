@@ -112,6 +112,14 @@
                     <line x1="9" y1="18" x2="21" y2="18" />
                 </svg>
             </button>
+            <button type="button" class="btn btn-icon" id="chatBtn"
+                title="Claude AI chat" aria-label="Claude AI chat" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 2C9 6 6 10 6 14a6 6 0 0012 0c0-4-3-8-6-12z" fill="currentColor"/>
+                    <circle cx="9" cy="13" r="1" fill="var(--bg)"/>
+                    <circle cx="15" cy="13" r="1" fill="var(--bg)"/>
+                </svg>
+            </button>
             <button
                 type="button"
                 class="btn btn-icon"
@@ -234,6 +242,34 @@
                 </div>
                 <div class="toc-panel-body" id="tocBody"></div>
             </div>
+            <div id="chatPanel" class="chat-panel">
+                <div class="chat-panel-header">
+                    <span>Claude AI</span>
+                    <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Close chat">×</button>
+                </div>
+                <div class="chat-context-bar" id="chatContextBar">
+                    <span class="chat-context-label">Context:</span>
+                    <div class="chat-chips" id="chatChips"></div>
+                </div>
+                <div class="chat-messages" id="chatMessages" aria-live="polite"></div>
+                <div class="chat-diff-viewer" id="chatDiffViewer" hidden>
+                    <div class="chat-diff-header">
+                        <span id="chatDiffPath" class="chat-diff-path"></span>
+                        <div class="chat-diff-actions">
+                            <button type="button" id="chatDiffAccept" class="btn chat-diff-accept-btn">Accept</button>
+                            <button type="button" id="chatDiffReject" class="btn btn-secondary chat-diff-reject-btn">Reject</button>
+                        </div>
+                    </div>
+                    <div class="chat-diff-body" id="chatDiffBody"></div>
+                    <div class="chat-diff-nav" id="chatDiffNav"></div>
+                </div>
+                <div class="chat-input-area">
+                    <textarea id="chatInput" class="chat-input" placeholder="Ask Claude about your document… (Enter to send, Shift+Enter for newline)" rows="3"></textarea>
+                    <div class="chat-input-actions">
+                        <button type="button" id="chatSendBtn" class="btn chat-send-btn" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
             <div id="debugPanel" class="debug-panel" aria-live="polite">
                 <div class="debug-line debug-header">
                     Debug log (new doc → # A → Enter → B)
@@ -275,6 +311,23 @@
                         </div>
                         <input type="checkbox" id="vimModeToggle" class="settings-toggle" role="switch" aria-checked="false" />
                     </label>
+                    <div class="settings-section-title">Claude AI</div>
+                    <div class="settings-row settings-row-apikey">
+                        <div class="settings-row-info">
+                            <span class="settings-row-title">Anthropic API key</span>
+                            <span class="settings-row-desc">Stored securely in your OS keychain, never in plaintext.</span>
+                        </div>
+                        <div class="settings-apikey-controls">
+                            <span id="apiKeyStatus" class="settings-apikey-status"></span>
+                            <button type="button" id="apiKeySetBtn" class="btn btn-secondary settings-apikey-btn">Set key</button>
+                            <button type="button" id="apiKeyDeleteBtn" class="btn btn-secondary settings-apikey-btn" hidden>Remove</button>
+                        </div>
+                    </div>
+                    <div class="settings-apikey-entry" id="apiKeyEntry" hidden>
+                        <input type="password" id="apiKeyInput" class="settings-apikey-input" placeholder="sk-ant-..." autocomplete="off" spellcheck="false"/>
+                        <button type="button" id="apiKeySaveBtn" class="btn">Save</button>
+                        <button type="button" id="apiKeyCancelBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
                 </div>
             </div>
         </div>
