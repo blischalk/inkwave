@@ -7,15 +7,15 @@
         <link rel="stylesheet" href="style.css" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
-        <link
-            rel="stylesheet"
-            href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
-        />
-        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js"></script>
+        <link id="googleFontsLink" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet"
+              onerror="this.onerror=null;this.href='vendor/fonts.css';window.__offlineFallback=true;" />
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
+              onerror="this.onerror=null;this.href='vendor/atom-one-dark.min.css';window.__offlineFallback=true;" />
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/marked.min.js';document.head.appendChild(s);"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/highlight.min.js';document.head.appendChild(s);"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/bash.min.js';document.head.appendChild(s);"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/shell.min.js';document.head.appendChild(s);"></script>
     </head>
     <body>
         <div class="toolbar">
@@ -173,6 +173,10 @@
                 </div>
             </div>
             <span class="filename" id="filename"></span>
+        </div>
+        <div id="offlineBanner" class="offline-banner" role="status" aria-live="polite" hidden>
+            <span class="offline-banner-text">You're offline — editing and viewing still work, but some features require internet</span>
+            <button type="button" class="offline-banner-dismiss" aria-label="Dismiss">&times;</button>
         </div>
         <div class="tab-bar hidden" id="tabBar">
             <!-- tabs appended by JS -->

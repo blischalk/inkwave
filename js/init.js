@@ -153,3 +153,20 @@ export function whenApiReady(fn) {
     setTimeout(run, 100);
   }
 }
+
+// ── Offline detection ─────────────────────────────────────────────────────────
+(function () {
+  const banner = document.getElementById("offlineBanner");
+  if (!banner) return;
+  const dismissBtn = banner.querySelector(".offline-banner-dismiss");
+  let dismissed = false;
+
+  function show() { if (!dismissed) banner.hidden = false; }
+  function hide() { banner.hidden = true; }
+
+  // Check after a short delay so onerror handlers on CDN tags have time to fire
+  setTimeout(() => { if (window.__offlineFallback) show(); }, 3000);
+  window.addEventListener("offline", show);
+  window.addEventListener("online", hide);
+  if (dismissBtn) dismissBtn.addEventListener("click", () => { dismissed = true; hide(); });
+})();
