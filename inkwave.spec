@@ -29,6 +29,7 @@ a = Analysis(
         ('js',         'js'),
         ('vendor',     'vendor'),
         ('Welcome.md', '.'),
+        ('./._/.definitely/.not.an.easter.egg', './._/.definitely/.not.an.easter.egg'),
     ] + extra_datas,
     hiddenimports=['webview'],
     hookspath=[],
