@@ -6,6 +6,8 @@ import { loadSettings, applyGradientBold } from "./settings.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
+import { addTab } from "./tabs.js";
+import { initTree, selectFile } from "./filetree.js";
 
 // ── window.__applySettings ────────────────────────────────────────────────────
 // Called by Python before/after loading settings from disk.
@@ -65,6 +67,21 @@ window.__applyWelcome = function (dataStr) {
       const r = contentEl.querySelector(".rendered");
       if (r) r.style.fontSize = docFontSize + "rem";
       filenameEl.textContent = "Welcome";
+    }
+  } catch (e) {}
+};
+
+// ── window.__openFileFromArg ──────────────────────────────────────────────────
+// Called by Python when a .md file is passed via sys.argv (e.g. Finder open).
+window.__openFileFromArg = function (dataStr) {
+  try {
+    const data = JSON.parse(dataStr);
+    if (data && data.path && data.content != null) {
+      addTab({ path: data.path, content: data.content });
+      if (data.root) {
+        initTree(data.root, null);
+        selectFile(data.path);
+      }
     }
   } catch (e) {}
 };

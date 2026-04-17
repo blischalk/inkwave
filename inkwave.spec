@@ -54,6 +54,7 @@ if sys.platform == 'darwin':
         strip=False,
         upx=True,
         console=False,
+        argv_emulation=True,
         icon=icon_mac,
     )
     coll = COLLECT(
@@ -79,6 +80,25 @@ if sys.platform == 'darwin':
             'NSHighResolutionCapable':  True,
             'NSRequiresAquaSystemAppearance': False,
             'NSLocalNetworkUsageDescription': 'Inkwave uses a local connection to display content. AI chat features require internet access.',
+            'CFBundleDocumentTypes': [
+                {
+                    'CFBundleTypeName': 'Markdown Document',
+                    'CFBundleTypeRole': 'Editor',
+                    'LSHandlerRank': 'Default',
+                    'LSItemContentTypes': ['net.daringfireball.markdown'],
+                    'CFBundleTypeExtensions': ['md', 'markdown'],
+                },
+            ],
+            'UTImportedTypeDeclarations': [
+                {
+                    'UTTypeIdentifier': 'net.daringfireball.markdown',
+                    'UTTypeDescription': 'Markdown Document',
+                    'UTTypeConformsTo': ['public.plain-text'],
+                    'UTTypeTagSpecification': {
+                        'public.filename-extension': ['md', 'markdown'],
+                    },
+                },
+            ],
         },
     )
 

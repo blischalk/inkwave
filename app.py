@@ -684,9 +684,80 @@ def main():
         except Exception:
             pass
 
+    def _open_md_in_window(path):
+        """Read a .md file and send it to the JS frontend to open in a new tab."""
+        try:
+            path = os.path.abspath(path)
+            if not path.lower().endswith(MD_EXTENSIONS) or not os.path.isfile(path):
+                return
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            data = json.dumps({"root": os.path.dirname(path), "path": path, "content": content})
+            window.evaluate_js(
+                "if (window.__openFileFromArg) window.__openFileFromArg(" + json.dumps(data) + ");"
+            )
+        except Exception:
+            pass
+
+    def inject_open_file():
+        """If a .md file was passed as an argument (e.g. Finder open), open it after load."""
+        try:
+            for arg in sys.argv[1:]:
+                if arg.startswith('-'):
+                    continue
+                if arg.lower().endswith(MD_EXTENSIONS) and os.path.isfile(arg):
+                    _open_md_in_window(arg)
+                    break
+        except Exception:
+            pass
+
+    # On macOS, hook into NSApplication delegate to handle files opened while app is running.
+    if sys.platform == 'darwin':
+        try:
+            from Foundation import NSObject
+            from AppKit import NSApplication
+            import objc
+
+            _original_delegate = None
+
+            class _OpenFileDelegate(NSObject):
+                def application_openFile_(self, app, filename):
+                    _open_md_in_window(str(filename))
+                    return True
+
+                def application_openFiles_(self, app, filenames):
+                    for f in filenames:
+                        _open_md_in_window(str(f))
+
+                # Forward everything else to the original delegate
+                def forwardingTargetForSelector_(self, sel):
+                    return _original_delegate
+
+                def respondsToSelector_(self, sel):
+                    if sel in (b'application:openFile:', b'application:openFiles:'):
+                        return True
+                    if _original_delegate and _original_delegate.respondsToSelector_(sel):
+                        return True
+                    return False
+
+            def _install_open_handler():
+                nonlocal _original_delegate
+                try:
+                    ns_app = NSApplication.sharedApplication()
+                    _original_delegate = ns_app.delegate()
+                    new_delegate = _OpenFileDelegate.alloc().init()
+                    ns_app.setDelegate_(new_delegate)
+                except Exception:
+                    pass
+
+            threading.Thread(target=lambda: (threading.Event().wait(1.0), _install_open_handler()), daemon=True).start()
+        except ImportError:
+            pass
+
     try:
         window.events.loaded += inject_welcome
         window.events.loaded += inject_settings
+        window.events.loaded += inject_open_file
     except Exception:
         pass
 
