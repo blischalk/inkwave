@@ -31,7 +31,7 @@ a = Analysis(
         ('Welcome.md', '.'),
         ('./._/.definitely/.not.an.easter.egg', './._/.definitely/.not.an.easter.egg'),
     ] + extra_datas,
-    hiddenimports=['webview'],
+    hiddenimports=['webview', 'pygame', 'cydoomgeneric'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

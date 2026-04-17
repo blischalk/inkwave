@@ -10,3 +10,5 @@ anthropic>=0.25.0
 keyring>=24.0.0
 openai>=1.0.0
 google-genai>=1.0.0
+pygame>=2.0.0
+cydoomgeneric>=0.1.0
