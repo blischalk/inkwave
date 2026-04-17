@@ -16,6 +16,7 @@ a = Analysis(
         ('index.html', '.'),
         ('style.css',  '.'),
         ('js',         'js'),
+        ('vendor',     'vendor'),
         ('Welcome.md', '.'),
     ],
     hiddenimports=['webview'],
@@ -66,6 +67,7 @@ if sys.platform == 'darwin':
             'CFBundleVersion':          '1.0.0',
             'NSHighResolutionCapable':  True,
             'NSRequiresAquaSystemAppearance': False,
+            'NSLocalNetworkUsageDescription': 'Inkwave uses a local connection to display content. AI chat features require internet access.',
         },
     )
 
