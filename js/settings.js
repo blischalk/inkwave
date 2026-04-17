@@ -1,4 +1,4 @@
-import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel } from "./state.js";
+import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
@@ -237,6 +237,7 @@ export function initSettings() {
 
   // Gradient bold text (default on)
   const gradientBoldOn = saved.gradientBold !== false;
+  setGradientBold(gradientBoldOn);
   applyGradientBold(gradientBoldOn);
   if (gradientBoldToggle) {
     gradientBoldToggle.checked = gradientBoldOn;
@@ -275,6 +276,10 @@ function openSettings() {
     vimToggle.checked = vimMode;
     vimToggle.setAttribute("aria-checked", vimMode ? "true" : "false");
   }
+  if (gradientBoldToggle) {
+    gradientBoldToggle.checked = gradientBold;
+    gradientBoldToggle.setAttribute("aria-checked", gradientBold ? "true" : "false");
+  }
   // Sync selects to current state (may have been changed via chat panel)
   if (llmProviderSelect) llmProviderSelect.value = llmProvider;
   populateModelSelect(llmProvider, llmModelSelect, llmModel);
@@ -311,6 +316,7 @@ if (llmProviderSelect) {
     const m = llmModelSelect ? llmModelSelect.value : "";
     setLlmModel(m);
     updateProviderSections(p);
+    loadAllKeyStatuses();
     const s = loadSettings(); s.llmProvider = p; s.llmModel = m; saveSettings(s);
     document.dispatchEvent(new CustomEvent("llm-changed", { detail: { provider: p, model: m } }));
   });
@@ -363,6 +369,7 @@ wireProviderKey("gemini", {
 if (gradientBoldToggle) {
   gradientBoldToggle.addEventListener("change", () => {
     const newVal = gradientBoldToggle.checked;
+    setGradientBold(newVal);
     applyGradientBold(newVal);
     gradientBoldToggle.setAttribute("aria-checked", newVal ? "true" : "false");
     const s = loadSettings(); s.gradientBold = newVal; saveSettings(s);

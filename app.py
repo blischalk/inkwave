@@ -480,6 +480,21 @@ class Api:
 
     # ── Multi-provider API key management ────────────────────────────────────
 
+    def _set_key_flag(self, provider, has_key):
+        """Write {provider}_key_set flag to settings file so status checks never touch keychain."""
+        try:
+            path = self._settings_path()
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+            data[f"{provider}_key_set"] = has_key
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
     def save_provider_api_key(self, provider, key):
         """Store an API key for a given provider in OS keychain. Returns {ok: bool, error?}."""
         if provider not in _KEYRING_USERNAMES:
@@ -488,19 +503,18 @@ class Api:
             return {"ok": False, "error": "keyring package not available"}
         try:
             _keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider], key)
+            self._set_key_flag(provider, True)
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def get_provider_api_key_status(self, provider):
-        """Returns {has_key: bool} for the given provider — never exposes the key value."""
+        """Returns {has_key: bool} using cached flag in settings — never reads keychain."""
         if provider not in _KEYRING_USERNAMES:
             return {"has_key": False}
-        if not _KEYRING_AVAILABLE:
-            return {"has_key": False}
         try:
-            val = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider])
-            return {"has_key": bool(val)}
+            settings = self.load_settings()
+            return {"has_key": bool(settings.get(f"{provider}_key_set", False))}
         except Exception:
             return {"has_key": False}
 
@@ -512,6 +526,7 @@ class Api:
             return {"ok": False, "error": "keyring package not available"}
         try:
             _keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider])
+            self._set_key_flag(provider, False)
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -539,17 +554,16 @@ class Api:
             return {"ok": False, "error": "keyring package not available"}
         try:
             _keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAME, key)
+            self._set_key_flag("anthropic", True)
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     def get_api_key_status(self):
-        """Returns {has_key: bool} — never exposes the key value."""
-        if not _KEYRING_AVAILABLE:
-            return {"has_key": False}
+        """Returns {has_key: bool} using cached flag — never reads keychain."""
         try:
-            val = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
-            return {"has_key": bool(val)}
+            settings = self.load_settings()
+            return {"has_key": bool(settings.get("anthropic_key_set", False))}
         except Exception:
             return {"has_key": False}
 
@@ -559,6 +573,7 @@ class Api:
             return {"ok": False, "error": "keyring package not available"}
         try:
             _keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
+            self._set_key_flag("anthropic", False)
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}

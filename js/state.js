@@ -42,6 +42,9 @@ export function setLlmModel(v) { llmModel = v; }
 export let docFontSize = 0.95;
 export function setDocFontSize(v) { docFontSize = v; }
 
+export let gradientBold = true;
+export function setGradientBold(v) { gradientBold = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content");
 export const filenameEl      = document.getElementById("filename");

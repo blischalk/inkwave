@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl,
-  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize,
+  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize, setGradientBold,
 } from "./state.js";
 import { loadSettings, applyGradientBold } from "./settings.js";
 import { getApi } from "./api.js";
@@ -36,6 +36,7 @@ window.__applySettings = function (dataStr) {
       setDocFontSize(Number(settings.docFontSize));
     }
     if (settings && settings.gradientBold === "false") {
+      setGradientBold(false);
       applyGradientBold(false);
     }
   } catch (e) {}
