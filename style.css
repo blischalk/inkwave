@@ -729,6 +729,21 @@ ul.md-list-container {
   list-style-type: disc;
   list-style-position: outside;
 }
+/* Task-list checkboxes */
+.md-list-container input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  cursor: pointer;
+  margin: 0 0.4em 0 0;
+  vertical-align: -0.1em;
+  width: 0.9em;
+  height: 0.9em;
+  flex-shrink: 0;
+}
+.md-list-container li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.2em;
+}
 .md-list-container .md-block-list {
   margin: 0.35em 0;
   padding-left: 0;
@@ -925,9 +940,11 @@ body[data-debug="true"] .debug-panel { display: block; }
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  width: 420px;
+  width: 480px;
   max-width: calc(100vw - 32px);
-  overflow: hidden;
+  max-height: 80vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .settings-header {
   display: flex;
@@ -1421,6 +1438,40 @@ body[data-theme="forest"] {
 }
 .chat-close-btn:hover { color: var(--text); background: var(--border); }
 
+.chat-provider-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+  flex-shrink: 0;
+}
+.chat-provider-select {
+  background: var(--toolbar-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.chat-provider-select:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.chat-model-select { flex: 1; min-width: 0; }
+.chat-provider-arrow {
+  color: var(--muted);
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .chat-context-bar {
   display: flex;
   align-items: center;
@@ -1704,6 +1755,23 @@ body[data-theme="forest"] {
   align-items: flex-start;
 }
 .settings-row-apikey:hover { background: transparent; }
+.settings-row-select { cursor: default; }
+.settings-row-select:hover { background: transparent; }
+.settings-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.84rem;
+  min-width: 160px;
+  cursor: pointer;
+}
+.settings-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  outline: none;
+}
 .settings-apikey-controls {
   display: flex;
   align-items: center;

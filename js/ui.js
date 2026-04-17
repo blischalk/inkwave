@@ -7,7 +7,9 @@ import {
   setActiveTabId,
   currentTabRef, currentBlocks, setCurrentBlocks, onShowTabContent,
   rawMode, setRawMode, rawModeBtn,
+  docFontSize, setDocFontSize,
 } from "./state.js";
+import { loadSettings, saveSettings } from "./settings.js";
 import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
 import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tabs.js";
@@ -362,6 +364,26 @@ if (rawModeBtn) {
   });
 }
 
+// ── Font size ────────────────────────────────────────────────────────────────
+const FONT_SIZE_DEFAULT = 0.95;
+const FONT_SIZE_MIN = 0.6;
+const FONT_SIZE_MAX = 2.0;
+const FONT_SIZE_STEP = 0.05;
+
+function changeFontSize(delta) {
+  const next = delta === 0
+    ? FONT_SIZE_DEFAULT
+    : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round((docFontSize + delta) * 100) / 100));
+  setDocFontSize(next);
+  const rendered = contentEl.querySelector(".rendered");
+  if (rendered) rendered.style.fontSize = next + "rem";
+  const raw = contentEl.querySelector(".raw-editor");
+  if (raw) raw.style.fontSize = next + "rem";
+  const s = loadSettings();
+  s.docFontSize = next;
+  saveSettings(s);
+}
+
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
   if (isPickerOpen()) {
@@ -400,6 +422,21 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       saveOrSaveAs(tab);
     }
+  }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {
+    e.preventDefault();
+    changeFontSize(+FONT_SIZE_STEP);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+    e.preventDefault();
+    changeFontSize(-FONT_SIZE_STEP);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+    e.preventDefault();
+    changeFontSize(0);
+    return;
   }
 });
 

@@ -1,3 +1,12 @@
-pywebview>=4.0
+pywebview>=4.0,<7.0
+# pyobjc 12.x crashes on macOS during NSWindow init (KVO/FFI bug); pin to 11.x
+pyobjc-core>=9.0,<12.0
+pyobjc-framework-Cocoa>=9.0,<12.0
+pyobjc-framework-WebKit>=9.0,<12.0
+pyobjc-framework-Quartz>=9.0,<12.0
+pyobjc-framework-security>=9.0,<12.0
+pyobjc-framework-UniformTypeIdentifiers>=9.0,<12.0
 anthropic>=0.25.0
 keyring>=24.0.0
+openai>=1.0.0
+google-genai>=1.0.0

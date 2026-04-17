@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl,
-  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode,
+  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode, docFontSize,
   setCurrentBlocks, setCurrentTabRef, setReplacingContent,
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
@@ -14,6 +14,11 @@ import {
 import { getTabTitle } from "./tabs.js";
 import { saveToFile } from "./fileio.js";
 import { dbg } from "./debug.js";
+
+function applyDocFontSize() {
+  const el = contentEl.querySelector(".rendered, .raw-editor");
+  if (el) el.style.fontSize = docFontSize + "rem";
+}
 
 /** Update block raw so the first image has the given width/height (px). Handles ![alt](url) and <img>. */
 function updateBlockRawWithImageSize(raw, widthPx, heightPx) {
@@ -45,6 +50,31 @@ function removeImageFromBlockRaw(raw) {
   const withoutMd = s.replace(/!\[[^\]]*\]\([^)]+\)/, "").trim();
   const withoutHtml = withoutMd.replace(/<img[^>]*>/gi, "").trim();
   return withoutHtml;
+}
+
+function wireCheckboxes(container, tab) {
+  container.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+    checkbox.removeAttribute("disabled");
+    checkbox.addEventListener("click", (e) => {
+      e.stopPropagation(); // don't bubble to block click handlers
+      const li = checkbox.closest("[data-block-index]");
+      if (!li) return;
+      const blockIndex = parseInt(li.getAttribute("data-block-index"), 10);
+      if (isNaN(blockIndex) || blockIndex < 0 || blockIndex >= currentBlocks.length) return;
+      const raw = blockRaw(currentBlocks[blockIndex]);
+      // checkbox.checked already reflects the NEW state after the click
+      const newRaw = checkbox.checked
+        ? raw.replace(/^([-*] |\d+\. )\[ \]/,    "$1[x]")
+        : raw.replace(/^([-*] |\d+\. )\[[xX]\]/, "$1[ ]");
+      if (newRaw === raw) return;
+      const blocksCopy = currentBlocks.slice();
+      blocksCopy[blockIndex] = { ...blocksCopy[blockIndex], raw: newRaw };
+      tab.content = blocksToContent(blocksCopy);
+      currentTabRef.content = tab.content;
+      setCurrentBlocks(blocksCopy);
+      saveToFile(tab);
+    });
+  });
 }
 
 function wireImageResize(container, tab, blocks) {
@@ -132,6 +162,7 @@ export function showTabContent(tab, preferredBlocks) {
       textarea.setAttribute("autocorrect", "off");
       textarea.setAttribute("autocapitalize", "none");
       contentEl.appendChild(textarea);
+      applyDocFontSize();
       setCurrentTabRef(tab);
       setCurrentBlocks(getBlocks(contentStr));
       filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
@@ -244,6 +275,7 @@ export function showTabContent(tab, preferredBlocks) {
       contentEl.innerHTML = html;
       highlightCodeInContainer(contentEl);
     }
+    applyDocFontSize();
     filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
 
     // Wire double-click to start edit (single-click + drag can select text for copy)
@@ -269,6 +301,7 @@ export function showTabContent(tab, preferredBlocks) {
         });
       });
     wireImageResize(contentEl, tab, currentBlocks);
+    wireCheckboxes(contentEl, tab);
     // Click anywhere in content area (including padding/empty space) but not on a block → new paragraph
     contentEl.onclick = (e) => {
       if (e.target.closest(".md-block")) return;
@@ -326,6 +359,7 @@ export function showWelcomeOrEmpty() {
     contentEl.innerHTML =
       '<div class="rendered">' + marked.parse(welcomeContent) + "</div>";
     highlightCodeInContainer(contentEl);
+    applyDocFontSize();
     filenameEl.textContent = "Welcome";
   } else {
     contentEl.className = "content empty";
@@ -355,6 +389,7 @@ export function render(data) {
   contentEl.innerHTML =
     '<div class="rendered">' + marked.parse(data.content) + "</div>";
   highlightCodeInContainer(contentEl);
+  applyDocFontSize();
 }
 
 // Register callbacks so tabs.js and editor.js can reach us without a direct import.

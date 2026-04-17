@@ -1,7 +1,8 @@
 import {
   contentEl, filenameEl,
-  setWelcomeContent, setVimMode,
+  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize,
 } from "./state.js";
+import { loadSettings } from "./settings.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
@@ -19,8 +20,31 @@ window.__applySettings = function (dataStr) {
       const toggle = document.getElementById("vimModeToggle");
       if (toggle) { toggle.checked = true; toggle.setAttribute("aria-checked", "true"); }
     }
+    if (settings && settings.llmProvider) {
+      setLlmProvider(settings.llmProvider);
+      const sel = document.getElementById("llmProviderSelect");
+      if (sel) sel.value = settings.llmProvider;
+    }
+    if (settings && settings.llmModel) {
+      setLlmModel(settings.llmModel);
+    }
+    if (settings && settings.ollamaBaseUrl) {
+      const input = document.getElementById("ollamaUrlInput");
+      if (input) input.value = settings.ollamaBaseUrl;
+    }
+    if (settings && settings.docFontSize) {
+      setDocFontSize(Number(settings.docFontSize));
+    }
   } catch (e) {}
 };
+
+// Restore font size from localStorage (for non-Python-injected settings path)
+(function () {
+  try {
+    const s = loadSettings();
+    if (s.docFontSize) setDocFontSize(Number(s.docFontSize));
+  } catch (e) {}
+})();
 
 // ── window.__applyWelcome ─────────────────────────────────────────────────────
 // Called by Python to inject Welcome.md content directly (fast path).
@@ -33,6 +57,8 @@ window.__applyWelcome = function (dataStr) {
       contentEl.innerHTML =
         '<div class="rendered">' + marked.parse(data.content) + "</div>";
       highlightCodeInContainer(contentEl);
+      const r = contentEl.querySelector(".rendered");
+      if (r) r.style.fontSize = docFontSize + "rem";
       filenameEl.textContent = "Welcome";
     }
   } catch (e) {}
@@ -73,6 +99,8 @@ export function loadWelcome() {
       contentEl.innerHTML =
         '<div class="rendered">' + marked.parse(data.content) + "</div>";
       highlightCodeInContainer(contentEl);
+      const r = contentEl.querySelector(".rendered");
+      if (r) r.style.fontSize = docFontSize + "rem";
       filenameEl.textContent = "Welcome";
     } else {
       showFallbackContent();

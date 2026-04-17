@@ -9,6 +9,8 @@ import os
 import re
 import sys
 import threading
+import urllib.error
+import urllib.request
 
 # Prefer Edge (WebView2) on Windows to avoid WinForms/pythonnet errors.
 # Must set before importing webview so the correct GUI backend is chosen.
@@ -29,8 +31,27 @@ try:
 except ImportError:
     _KEYRING_AVAILABLE = False
 
-_KEYRING_SERVICE  = "Inkwave"
-_KEYRING_USERNAME = "anthropic_api_key"
+try:
+    import openai as _openai
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+
+try:
+    import google.genai as _genai
+    from google.genai.types import GenerateContentConfig
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
+
+_KEYRING_SERVICE = "Inkwave"
+_KEYRING_USERNAMES = {
+    "anthropic": "anthropic_api_key",
+    "openai":    "openai_api_key",
+    "gemini":    "gemini_api_key",
+}
+# Backward-compat alias used by the old save_api_key / get_api_key_status / delete_api_key methods
+_KEYRING_USERNAME = _KEYRING_USERNAMES["anthropic"]
 
 
 def _build_system_prompt(file_contexts):
@@ -42,7 +63,7 @@ def _build_system_prompt(file_contexts):
     elif isinstance(file_contexts, list):
         files = file_contexts
 
-    base = """You are Claude, an AI assistant embedded in Inkwave, a Markdown editor.
+    base = """You are an AI assistant embedded in Inkwave, a Markdown editor.
 
 ## File Change Protocol
 When asked to modify or create a file, wrap the COMPLETE file content in:
@@ -146,6 +167,102 @@ def _list_dir_md_only(dir_path):
         return []
     entries.sort(key=lambda x: (not x["isDir"], x["name"].lower()))
     return entries
+
+
+def _stream_anthropic(api_key, model, system_prompt, messages, push_fn):
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        with client.messages.stream(
+            model=model,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
+            for chunk in stream.text_stream:
+                push_fn(f"window.__chatChunk({json.dumps(chunk)})")
+        push_fn("window.__chatDone()")
+    except Exception as e:
+        err_type = type(e).__name__
+        if "AuthenticationError" in err_type:
+            msg = "Authentication failed. Check your API key in Settings."
+        elif "RateLimitError" in err_type:
+            msg = "Rate limit reached. Please wait a moment and try again."
+        elif "APIConnectionError" in err_type:
+            msg = "Connection error. Check your internet connection."
+        else:
+            msg = str(e)
+        push_fn(f"window.__chatError({json.dumps(msg)})")
+
+
+def _stream_openai(api_key, model, system_prompt, messages, push_fn):
+    try:
+        client = _openai.OpenAI(api_key=api_key)
+        stream = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system_prompt}] + messages,
+            stream=True,
+        )
+        for chunk in stream:
+            content = chunk.choices[0].delta.content if chunk.choices else None
+            if content is not None:
+                push_fn(f"window.__chatChunk({json.dumps(content)})")
+        push_fn("window.__chatDone()")
+    except Exception as e:
+        err_type = type(e).__name__
+        if "AuthenticationError" in err_type:
+            msg = "Authentication failed. Check your API key in Settings."
+        elif "RateLimitError" in err_type:
+            msg = "Rate limit reached. Please wait a moment and try again."
+        elif "APIConnectionError" in err_type or "connect" in str(e).lower():
+            msg = "Connection error. Check your internet connection."
+        else:
+            msg = str(e)
+        push_fn(f"window.__chatError({json.dumps(msg)})")
+
+
+def _stream_gemini(api_key, model, system_prompt, messages, push_fn):
+    try:
+        client = _genai.Client(api_key=api_key)
+        gemini_messages = []
+        for m in messages:
+            role = "model" if m["role"] == "assistant" else m["role"]
+            gemini_messages.append({"role": role, "parts": [{"text": m["content"]}]})
+        config = GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=4096,
+        )
+        for chunk in client.models.generate_content_stream(
+            model=model,
+            contents=gemini_messages,
+            config=config,
+        ):
+            if chunk.text:
+                push_fn(f"window.__chatChunk({json.dumps(chunk.text)})")
+        push_fn("window.__chatDone()")
+    except Exception as e:
+        push_fn(f"window.__chatError({json.dumps(str(e))})")
+
+
+def _stream_ollama(model, system_prompt, messages, base_url, push_fn):
+    try:
+        client = _openai.OpenAI(api_key="ollama", base_url=f"{base_url}/v1")
+        stream = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system_prompt}] + messages,
+            stream=True,
+        )
+        for chunk in stream:
+            content = chunk.choices[0].delta.content if chunk.choices else None
+            if content is not None:
+                push_fn(f"window.__chatChunk({json.dumps(content)})")
+        push_fn("window.__chatDone()")
+    except Exception as e:
+        err_str = str(e)
+        if "connect" in err_str.lower() or "connection" in err_str.lower():
+            msg = f"Ollama not running at {base_url}. Start it with `ollama serve`."
+        else:
+            msg = err_str
+        push_fn(f"window.__chatError({json.dumps(msg)})")
 
 
 class Api:
@@ -361,7 +478,60 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # ── Claude AI API key management ──────────────────────────────────────────
+    # ── Multi-provider API key management ────────────────────────────────────
+
+    def save_provider_api_key(self, provider, key):
+        """Store an API key for a given provider in OS keychain. Returns {ok: bool, error?}."""
+        if provider not in _KEYRING_USERNAMES:
+            return {"ok": False, "error": f"Unknown provider: {provider}"}
+        if not _KEYRING_AVAILABLE:
+            return {"ok": False, "error": "keyring package not available"}
+        try:
+            _keyring.set_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider], key)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def get_provider_api_key_status(self, provider):
+        """Returns {has_key: bool} for the given provider — never exposes the key value."""
+        if provider not in _KEYRING_USERNAMES:
+            return {"has_key": False}
+        if not _KEYRING_AVAILABLE:
+            return {"has_key": False}
+        try:
+            val = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider])
+            return {"has_key": bool(val)}
+        except Exception:
+            return {"has_key": False}
+
+    def delete_provider_api_key(self, provider):
+        """Remove API key for a given provider from OS keychain. Returns {ok: bool}."""
+        if provider not in _KEYRING_USERNAMES:
+            return {"ok": False, "error": f"Unknown provider: {provider}"}
+        if not _KEYRING_AVAILABLE:
+            return {"ok": False, "error": "keyring package not available"}
+        try:
+            _keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[provider])
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    def list_ollama_models(self):
+        """Fetch available models from a running Ollama instance. Returns {models: [...], error?}."""
+        settings = self.load_settings()
+        base_url = settings.get("ollamaBaseUrl", "http://localhost:11434")
+        try:
+            req = urllib.request.Request(f"{base_url}/api/tags")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                data = json.loads(resp.read())
+            models = [m["name"] for m in data.get("models", [])]
+            return {"models": models}
+        except urllib.error.URLError as e:
+            return {"models": [], "error": str(e)}
+        except Exception as e:
+            return {"models": [], "error": str(e)}
+
+    # ── Legacy Anthropic-only API key management (backward compat) ────────────
 
     def save_api_key(self, key):
         """Store Anthropic API key in OS keychain. Returns {ok: bool, error?}."""
@@ -394,45 +564,58 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     def chat(self, messages, file_contexts):
-        """Start a streaming Claude chat in a background thread. Returns {ok: True} immediately."""
-        if not _ANTHROPIC_AVAILABLE:
-            return {"ok": False, "error": "anthropic package not available"}
-        if not _KEYRING_AVAILABLE:
-            return {"ok": False, "error": "no_api_key"}
-        try:
-            api_key = _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAME)
-        except Exception:
-            api_key = None
-        if not api_key:
-            return {"ok": False, "error": "no_api_key"}
-
+        """Start a streaming AI chat in a background thread. Returns {ok: True} immediately."""
+        settings = self.load_settings()
+        provider = settings.get("llmProvider", "anthropic")
+        model    = settings.get("llmModel", "claude-sonnet-4-6")
         system_prompt = _build_system_prompt(file_contexts or [])
+        push_fn = self._push_js
 
-        def _stream():
+        def _get_key(p):
+            if not _KEYRING_AVAILABLE:
+                return None
             try:
-                client = _anthropic.Anthropic(api_key=api_key)
-                with client.messages.stream(
-                    model="claude-sonnet-4-6",
-                    max_tokens=4096,
-                    system=system_prompt,
-                    messages=messages,
-                ) as stream:
-                    for text_chunk in stream.text_stream:
-                        self._push_js(f"window.__chatChunk({json.dumps(text_chunk)})")
-                self._push_js("window.__chatDone()")
-            except Exception as e:
-                err_type = type(e).__name__
-                if "AuthenticationError" in err_type:
-                    msg = "Authentication failed. Check your API key in Settings."
-                elif "RateLimitError" in err_type:
-                    msg = "Rate limit reached. Please wait a moment and try again."
-                elif "APIConnectionError" in err_type:
-                    msg = "Connection error. Check your internet connection."
-                else:
-                    msg = str(e)
-                self._push_js(f"window.__chatError({json.dumps(msg)})")
+                return _keyring.get_password(_KEYRING_SERVICE, _KEYRING_USERNAMES[p])
+            except Exception:
+                return None
 
-        t = threading.Thread(target=_stream, daemon=True)
+        if provider == "anthropic":
+            if not _ANTHROPIC_AVAILABLE:
+                return {"ok": False, "error": "anthropic package not available"}
+            api_key = _get_key("anthropic")
+            if not api_key:
+                return {"ok": False, "error": "no_api_key"}
+            t = threading.Thread(
+                target=lambda: _stream_anthropic(api_key, model, system_prompt, messages, push_fn),
+                daemon=True)
+        elif provider == "openai":
+            if not _OPENAI_AVAILABLE:
+                return {"ok": False, "error": "openai package not available"}
+            api_key = _get_key("openai")
+            if not api_key:
+                return {"ok": False, "error": "no_api_key"}
+            t = threading.Thread(
+                target=lambda: _stream_openai(api_key, model, system_prompt, messages, push_fn),
+                daemon=True)
+        elif provider == "gemini":
+            if not _GENAI_AVAILABLE:
+                return {"ok": False, "error": "google-genai package not available"}
+            api_key = _get_key("gemini")
+            if not api_key:
+                return {"ok": False, "error": "no_api_key"}
+            t = threading.Thread(
+                target=lambda: _stream_gemini(api_key, model, system_prompt, messages, push_fn),
+                daemon=True)
+        elif provider == "ollama":
+            if not _OPENAI_AVAILABLE:
+                return {"ok": False, "error": "openai package not available (required for Ollama)"}
+            base_url = settings.get("ollamaBaseUrl", "http://localhost:11434")
+            t = threading.Thread(
+                target=lambda: _stream_ollama(model, system_prompt, messages, base_url, push_fn),
+                daemon=True)
+        else:
+            return {"ok": False, "error": f"Unknown provider: {provider}"}
+
         t.start()
         return {"ok": True}
 

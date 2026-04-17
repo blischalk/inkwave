@@ -33,6 +33,15 @@ export function setRawMode(v) { rawMode = v; }
 export let vimMode = false;
 export function setVimMode(v) { vimMode = v; }
 
+export let llmProvider = "anthropic";
+export function setLlmProvider(v) { llmProvider = v; }
+
+export let llmModel = "claude-sonnet-4-6";
+export function setLlmModel(v) { llmModel = v; }
+
+export let docFontSize = 0.95;
+export function setDocFontSize(v) { docFontSize = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content");
 export const filenameEl      = document.getElementById("filename");

@@ -113,7 +113,7 @@
                 </svg>
             </button>
             <button type="button" class="btn btn-icon" id="chatBtn"
-                title="Claude AI chat" aria-label="Claude AI chat" aria-pressed="false">
+                title="AI chat" aria-label="AI chat" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 2C9 6 6 10 6 14a6 6 0 0012 0c0-4-3-8-6-12z" fill="currentColor"/>
                     <circle cx="9" cy="13" r="1" fill="var(--bg)"/>
@@ -244,8 +244,20 @@
             </div>
             <div id="chatPanel" class="chat-panel">
                 <div class="chat-panel-header">
-                    <span>Claude AI</span>
+                    <span>AI Chat</span>
                     <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Close chat">×</button>
+                </div>
+                <div class="chat-provider-bar">
+                    <select id="chatProviderSelect" class="chat-provider-select" title="AI Provider">
+                        <option value="anthropic">Claude (Anthropic)</option>
+                        <option value="openai">ChatGPT (OpenAI)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                        <option value="ollama">Ollama (local)</option>
+                    </select>
+                    <svg viewBox="0 0 24 24" width="10" height="10" class="chat-provider-arrow" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                    <select id="chatModelSelect" class="chat-provider-select chat-model-select" title="Model">
+                        <!-- populated by JS -->
+                    </select>
                 </div>
                 <div class="chat-context-bar" id="chatContextBar">
                     <span class="chat-context-label">Context:</span>
@@ -264,7 +276,7 @@
                     <div class="chat-diff-nav" id="chatDiffNav"></div>
                 </div>
                 <div class="chat-input-area">
-                    <textarea id="chatInput" class="chat-input" placeholder="Ask Claude about your document… (Enter to send, Shift+Enter for newline)" rows="3"></textarea>
+                    <textarea id="chatInput" class="chat-input" placeholder="Ask the AI about your document… (Enter to send, Shift+Enter for newline)" rows="3"></textarea>
                     <div class="chat-input-actions">
                         <button type="button" id="chatSendBtn" class="btn chat-send-btn" disabled>Send</button>
                     </div>
@@ -311,23 +323,112 @@
                         </div>
                         <input type="checkbox" id="vimModeToggle" class="settings-toggle" role="switch" aria-checked="false" />
                     </label>
-                    <div class="settings-section-title">Claude AI</div>
-                    <div class="settings-row settings-row-apikey">
+
+                    <div class="settings-section-title">AI Provider</div>
+                    <div class="settings-row settings-row-select">
                         <div class="settings-row-info">
-                            <span class="settings-row-title">Anthropic API key</span>
-                            <span class="settings-row-desc">Stored securely in your OS keychain, never in plaintext.</span>
+                            <span class="settings-row-title">Provider</span>
                         </div>
-                        <div class="settings-apikey-controls">
-                            <span id="apiKeyStatus" class="settings-apikey-status"></span>
-                            <button type="button" id="apiKeySetBtn" class="btn btn-secondary settings-apikey-btn">Set key</button>
-                            <button type="button" id="apiKeyDeleteBtn" class="btn btn-secondary settings-apikey-btn" hidden>Remove</button>
+                        <select id="llmProviderSelect" class="settings-select">
+                            <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="openai">OpenAI (ChatGPT)</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="ollama">Ollama (local)</option>
+                        </select>
+                    </div>
+                    <div class="settings-row settings-row-select">
+                        <div class="settings-row-info">
+                            <span class="settings-row-title">Model</span>
+                        </div>
+                        <select id="llmModelSelect" class="settings-select">
+                            <!-- populated by JS -->
+                        </select>
+                    </div>
+
+                    <div class="settings-section-title">API Keys</div>
+
+                    <!-- Anthropic -->
+                    <div id="anthropicKeySection">
+                        <div class="settings-row settings-row-apikey">
+                            <div class="settings-row-info">
+                                <span class="settings-row-title">Anthropic API key</span>
+                                <span class="settings-row-desc">Stored securely in your OS keychain, never in plaintext.</span>
+                            </div>
+                            <div class="settings-apikey-controls">
+                                <span id="anthropicKeyStatus" class="settings-apikey-status"></span>
+                                <button type="button" id="anthropicKeySetBtn" class="btn btn-secondary settings-apikey-btn">Set key</button>
+                                <button type="button" id="anthropicKeyDeleteBtn" class="btn btn-secondary settings-apikey-btn" hidden>Remove</button>
+                            </div>
+                        </div>
+                        <div class="settings-apikey-entry" id="anthropicKeyEntry" hidden>
+                            <input type="password" id="anthropicKeyInput" class="settings-apikey-input" placeholder="sk-ant-..." autocomplete="off" spellcheck="false"/>
+                            <button type="button" id="anthropicKeySaveBtn" class="btn">Save</button>
+                            <button type="button" id="anthropicKeyCancelBtn" class="btn btn-secondary">Cancel</button>
                         </div>
                     </div>
-                    <div class="settings-apikey-entry" id="apiKeyEntry" hidden>
-                        <input type="password" id="apiKeyInput" class="settings-apikey-input" placeholder="sk-ant-..." autocomplete="off" spellcheck="false"/>
-                        <button type="button" id="apiKeySaveBtn" class="btn">Save</button>
-                        <button type="button" id="apiKeyCancelBtn" class="btn btn-secondary">Cancel</button>
+
+                    <!-- OpenAI -->
+                    <div id="openaiKeySection" hidden>
+                        <div class="settings-row settings-row-apikey">
+                            <div class="settings-row-info">
+                                <span class="settings-row-title">OpenAI API key</span>
+                                <span class="settings-row-desc">Stored securely in your OS keychain, never in plaintext.</span>
+                            </div>
+                            <div class="settings-apikey-controls">
+                                <span id="openaiKeyStatus" class="settings-apikey-status"></span>
+                                <button type="button" id="openaiKeySetBtn" class="btn btn-secondary settings-apikey-btn">Set key</button>
+                                <button type="button" id="openaiKeyDeleteBtn" class="btn btn-secondary settings-apikey-btn" hidden>Remove</button>
+                            </div>
+                        </div>
+                        <div class="settings-apikey-entry" id="openaiKeyEntry" hidden>
+                            <input type="password" id="openaiKeyInput" class="settings-apikey-input" placeholder="sk-..." autocomplete="off" spellcheck="false"/>
+                            <button type="button" id="openaiKeySaveBtn" class="btn">Save</button>
+                            <button type="button" id="openaiKeyCancelBtn" class="btn btn-secondary">Cancel</button>
+                        </div>
                     </div>
+
+                    <!-- Gemini -->
+                    <div id="geminiKeySection" hidden>
+                        <div class="settings-row settings-row-apikey">
+                            <div class="settings-row-info">
+                                <span class="settings-row-title">Google Gemini API key</span>
+                                <span class="settings-row-desc">Stored securely in your OS keychain, never in plaintext.</span>
+                            </div>
+                            <div class="settings-apikey-controls">
+                                <span id="geminiKeyStatus" class="settings-apikey-status"></span>
+                                <button type="button" id="geminiKeySetBtn" class="btn btn-secondary settings-apikey-btn">Set key</button>
+                                <button type="button" id="geminiKeyDeleteBtn" class="btn btn-secondary settings-apikey-btn" hidden>Remove</button>
+                            </div>
+                        </div>
+                        <div class="settings-apikey-entry" id="geminiKeyEntry" hidden>
+                            <input type="password" id="geminiKeyInput" class="settings-apikey-input" placeholder="AIza..." autocomplete="off" spellcheck="false"/>
+                            <button type="button" id="geminiKeySaveBtn" class="btn">Save</button>
+                            <button type="button" id="geminiKeyCancelBtn" class="btn btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+
+                    <!-- Ollama -->
+                    <div id="ollamaSection" hidden>
+                        <div class="settings-row settings-row-apikey">
+                            <div class="settings-row-info">
+                                <span class="settings-row-title">Ollama base URL</span>
+                                <span class="settings-row-desc">URL where your Ollama server is running.</span>
+                            </div>
+                            <div class="settings-apikey-controls">
+                                <input type="text" id="ollamaUrlInput" class="settings-apikey-input" placeholder="http://localhost:11434" autocomplete="off" spellcheck="false" style="width:200px"/>
+                                <button type="button" id="ollamaRefreshBtn" class="btn btn-secondary settings-apikey-btn">Refresh models</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legacy (hidden, kept for backward compat with old settings.js refs) -->
+                    <span id="apiKeyStatus" hidden></span>
+                    <span id="apiKeySetBtn" hidden></span>
+                    <span id="apiKeyDeleteBtn" hidden></span>
+                    <span id="apiKeyEntry" hidden></span>
+                    <span id="apiKeyInput" hidden></span>
+                    <span id="apiKeySaveBtn" hidden></span>
+                    <span id="apiKeyCancelBtn" hidden></span>
                 </div>
             </div>
         </div>

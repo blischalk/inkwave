@@ -1,23 +1,46 @@
-import { tabs, treeRoot, onShowTabContent } from "./state.js";
+import { tabs, treeRoot, onShowTabContent, llmProvider, llmModel, setLlmProvider, setLlmModel } from "./state.js";
 import { getApi } from "./api.js";
 import { escapeHtml } from "./utils.js";
 import { refreshFolder } from "./filetree.js";
+import { PROVIDER_MODELS, loadSettings, saveSettings, populateModelSelect, fetchOllamaModels } from "./settings.js";
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const chatPanel      = document.getElementById("chatPanel");
-const chatCloseBtn   = document.getElementById("chatCloseBtn");
-const chatBtn        = document.getElementById("chatBtn");
-const chatMessages   = document.getElementById("chatMessages");
-const chatInput      = document.getElementById("chatInput");
-const chatSendBtn    = document.getElementById("chatSendBtn");
-const chatChips      = document.getElementById("chatChips");
-const chatDiffViewer = document.getElementById("chatDiffViewer");
-const chatDiffPath   = document.getElementById("chatDiffPath");
-const chatDiffBody   = document.getElementById("chatDiffBody");
-const chatDiffNav    = document.getElementById("chatDiffNav");
-const chatDiffAccept = document.getElementById("chatDiffAccept");
-const chatDiffReject = document.getElementById("chatDiffReject");
-const tocPanel       = document.getElementById("tocPanel");
+const chatPanel          = document.getElementById("chatPanel");
+const chatCloseBtn       = document.getElementById("chatCloseBtn");
+const chatBtn            = document.getElementById("chatBtn");
+const chatMessages       = document.getElementById("chatMessages");
+const chatInput          = document.getElementById("chatInput");
+const chatSendBtn        = document.getElementById("chatSendBtn");
+const chatChips          = document.getElementById("chatChips");
+const chatDiffViewer     = document.getElementById("chatDiffViewer");
+const chatDiffPath       = document.getElementById("chatDiffPath");
+const chatDiffBody       = document.getElementById("chatDiffBody");
+const chatDiffNav        = document.getElementById("chatDiffNav");
+const chatDiffAccept     = document.getElementById("chatDiffAccept");
+const chatDiffReject     = document.getElementById("chatDiffReject");
+const tocPanel           = document.getElementById("tocPanel");
+const chatProviderSelect = document.getElementById("chatProviderSelect");
+const chatModelSelect    = document.getElementById("chatModelSelect");
+
+// ── Provider display names ────────────────────────────────────────────────────
+const PROVIDER_NAMES = {
+  anthropic: "Claude",
+  openai:    "ChatGPT",
+  gemini:    "Gemini",
+  ollama:    "the AI",
+};
+
+function updateChatPlaceholder(provider) {
+  if (!chatInput) return;
+  const name = PROVIDER_NAMES[provider] || "the AI";
+  chatInput.placeholder = `Ask ${name} about your document… (Enter to send, Shift+Enter for newline)`;
+}
+
+function syncChatProviderUI(provider, model) {
+  if (chatProviderSelect) chatProviderSelect.value = provider;
+  populateModelSelect(provider, chatModelSelect, model);
+  updateChatPlaceholder(provider);
+}
 
 // ── Module state ──────────────────────────────────────────────────────────────
 let chatVisible = false;
@@ -41,6 +64,10 @@ export function showChat() {
   chatVisible = true;
   if (chatPanel) chatPanel.classList.add("visible");
   if (chatBtn) chatBtn.setAttribute("aria-pressed", "true");
+  syncChatProviderUI(llmProvider, llmModel);
+  if (llmProvider === "ollama" && PROVIDER_MODELS.ollama.length === 0) {
+    fetchOllamaModels().then(() => populateModelSelect("ollama", chatModelSelect, llmModel));
+  }
   renderContextChips();
 }
 
@@ -135,7 +162,7 @@ async function sendMessage() {
   if (!result || !result.ok) {
     const errMsg = result && result.error;
     if (errMsg === "no_api_key") {
-      finishStreamWithError('No API key set. Open <strong>Settings</strong> to add your Anthropic API key.');
+      finishStreamWithError('No API key set. Open <strong>Settings</strong> to add your API key for the selected provider.');
     } else {
       finishStreamWithError(escapeHtml(errMsg || "Unknown error starting chat."));
     }
@@ -395,3 +422,39 @@ if (chatBtn) {
 if (chatCloseBtn) {
   chatCloseBtn.addEventListener("click", hideChat);
 }
+
+// ── Chat-panel provider/model switcher ────────────────────────────────────────
+if (chatProviderSelect) {
+  chatProviderSelect.addEventListener("change", async () => {
+    const p = chatProviderSelect.value;
+    setLlmProvider(p);
+    if (p === "ollama") await fetchOllamaModels();
+    populateModelSelect(p, chatModelSelect, "");
+    const m = chatModelSelect ? chatModelSelect.value : "";
+    setLlmModel(m);
+    updateChatPlaceholder(p);
+    const s = loadSettings(); s.llmProvider = p; s.llmModel = m; saveSettings(s);
+    document.dispatchEvent(new CustomEvent("llm-changed", { detail: { provider: p, model: m } }));
+  });
+}
+
+if (chatModelSelect) {
+  chatModelSelect.addEventListener("change", () => {
+    const m = chatModelSelect.value;
+    setLlmModel(m);
+    const s = loadSettings(); s.llmModel = m; saveSettings(s);
+    document.dispatchEvent(new CustomEvent("llm-changed", { detail: { provider: llmProvider, model: m } }));
+  });
+}
+
+// Keep chat panel in sync when provider/model changes from settings panel
+document.addEventListener("llm-changed", ({ detail }) => {
+  if (!chatVisible) return;
+  if (chatProviderSelect && chatProviderSelect.value !== detail.provider) {
+    chatProviderSelect.value = detail.provider;
+    populateModelSelect(detail.provider, chatModelSelect, detail.model);
+    updateChatPlaceholder(detail.provider);
+  } else if (chatModelSelect && chatModelSelect.value !== detail.model) {
+    chatModelSelect.value = detail.model;
+  }
+});
