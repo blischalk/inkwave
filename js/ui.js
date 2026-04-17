@@ -18,6 +18,22 @@ import { saveToFile, saveOrSaveAs, flushActiveEditAndSave } from "./fileio.js";
 import { getBlocks, blocksToContent } from "./blocks.js";
 import { getBlockModeContentOffset } from "./vim.js";
 import { render } from "./renderer.js";
+import { launchDoom } from "./doom.js";
+
+// ── Easter egg ────────────────────────────────────────────────────────────────
+const _logo = document.querySelector(".app-logo");
+if (_logo) {
+  let _clicks = [];
+  _logo.addEventListener("click", () => {
+    const now = Date.now();
+    _clicks.push(now);
+    _clicks = _clicks.filter(t => now - t < 2000);
+    if (_clicks.length >= 5) {
+      _clicks = [];
+      launchDoom();
+    }
+  });
+}
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const themePickerWrap  = document.getElementById("themePickerWrap");

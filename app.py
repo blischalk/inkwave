@@ -268,6 +268,7 @@ def _stream_ollama(model, system_prompt, messages, base_url, push_fn):
 class Api:
     def __init__(self, window):
         self._window = window  # use private name so it's less likely to be introspected
+        self._doom_proc = None
 
     def open_file(self):
         """Pick a markdown file; returns root (parent dir), path, content (or error)."""
@@ -632,6 +633,25 @@ class Api:
             return {"ok": False, "error": f"Unknown provider: {provider}"}
 
         t.start()
+        return {"ok": True}
+
+    def launch_doom(self):
+        """Easter egg: launch DOOM in a native pygame window."""
+        import subprocess, shutil
+        if self._doom_proc and self._doom_proc.poll() is None:
+            return {"ok": True}
+        egg_dir = os.path.join(BASE_DIR, '._', '.definitely', '.not.an.easter.egg')
+        runner = os.path.join(egg_dir, 'doom_runner.py')
+        wad = os.path.join(egg_dir, 'DOOM1.WAD')
+        if not os.path.isfile(runner) or not os.path.isfile(wad):
+            return {"ok": False, "error": "Not found"}
+        python = sys.executable if not getattr(sys, 'frozen', False) else (shutil.which('python3') or shutil.which('python'))
+        if not python:
+            return {"ok": False, "error": "Python not found"}
+        try:
+            self._doom_proc = subprocess.Popen([python, runner, wad])
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
         return {"ok": True}
 
     def _push_js(self, js_string):
