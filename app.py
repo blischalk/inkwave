@@ -653,11 +653,44 @@ def main():
         webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
 
     api = Api(None)
+
+    # Restore saved window geometry
+    saved = api.load_settings()
+    win_kw = dict(width=1200, height=800)
+    try:
+        if "windowWidth" in saved and "windowHeight" in saved:
+            win_kw["width"] = int(float(saved["windowWidth"]))
+            win_kw["height"] = int(float(saved["windowHeight"]))
+        if "windowX" in saved and "windowY" in saved:
+            win_kw["x"] = int(float(saved["windowX"]))
+            win_kw["y"] = int(float(saved["windowY"]))
+    except (ValueError, TypeError):
+        pass
+
+    # Clamp to visible screen area so the window isn't off-screen
+    if "x" in win_kw and "y" in win_kw:
+        try:
+            from AppKit import NSScreen
+            max_x = max_y = 0
+            min_x = min_y = float("inf")
+            for screen in NSScreen.screens():
+                f = screen.frame()
+                min_x = min(min_x, f.origin.x)
+                min_y = min(min_y, f.origin.y)
+                max_x = max(max_x, f.origin.x + f.size.width)
+                max_y = max(max_y, f.origin.y + f.size.height)
+            w, h = win_kw["width"], win_kw["height"]
+            win_kw["x"] = max(int(min_x), min(win_kw["x"], int(max_x) - w))
+            win_kw["y"] = max(int(min_y), min(win_kw["y"], int(max_y) - h))
+            win_kw["width"] = min(w, int(max_x - min_x))
+            win_kw["height"] = min(h, int(max_y - min_y))
+        except Exception:
+            pass
+
     window = webview.create_window(
         "Inkwave",
         os.path.join(BASE_DIR, "index.html"),
-        width=1200,
-        height=800,
+        **win_kw,
         min_size=(500, 400),
         js_api=api,
     )
@@ -764,6 +797,37 @@ def main():
         window.events.loaded += inject_welcome
         window.events.loaded += inject_settings
         window.events.loaded += inject_open_file
+    except Exception:
+        pass
+
+    # Persist window geometry on resize/move (debounced)
+    _geo_timer = None
+
+    def _save_geometry():
+        try:
+            for key, val in [("windowWidth", window.width), ("windowHeight", window.height),
+                             ("windowX", window.x), ("windowY", window.y)]:
+                api.save_setting(key, str(val))
+        except Exception:
+            pass
+
+    def _schedule_save():
+        nonlocal _geo_timer
+        if _geo_timer:
+            _geo_timer.cancel()
+        _geo_timer = threading.Timer(0.5, _save_geometry)
+        _geo_timer.daemon = True
+        _geo_timer.start()
+
+    def on_resized(width, height):
+        _schedule_save()
+
+    def on_moved(x, y):
+        _schedule_save()
+
+    try:
+        window.events.resized += on_resized
+        window.events.moved += on_moved
     except Exception:
         pass
 
