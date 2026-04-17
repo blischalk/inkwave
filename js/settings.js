@@ -5,7 +5,8 @@ import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.
 const settingsBtn      = document.getElementById("settingsBtn");
 const settingsModal    = document.getElementById("settingsModal");
 const settingsCloseBtn = document.getElementById("settingsCloseBtn");
-const vimToggle        = document.getElementById("vimModeToggle");
+const vimToggle           = document.getElementById("vimModeToggle");
+const gradientBoldToggle  = document.getElementById("gradientBoldToggle");
 
 // Provider / model selects (settings panel)
 const llmProviderSelect = document.getElementById("llmProviderSelect");
@@ -77,6 +78,10 @@ export const PROVIDER_MODELS = {
   ],
   ollama: [],
 };
+
+export function applyGradientBold(enabled) {
+  document.body.setAttribute("data-bold-gradient", enabled ? "on" : "off");
+}
 
 export function loadSettings() {
   try {
@@ -230,6 +235,14 @@ function wireProviderKey(provider, { setBtn, deleteBtn, entry, input, saveBtn, c
 export function initSettings() {
   const saved = loadSettings();
 
+  // Gradient bold text (default on)
+  const gradientBoldOn = saved.gradientBold !== false;
+  applyGradientBold(gradientBoldOn);
+  if (gradientBoldToggle) {
+    gradientBoldToggle.checked = gradientBoldOn;
+    gradientBoldToggle.setAttribute("aria-checked", gradientBoldOn ? "true" : "false");
+  }
+
   // Vim mode
   if (saved.vimMode === true) {
     setVimMode(true);
@@ -346,6 +359,15 @@ wireProviderKey("gemini", {
   saveBtn: geminiKeySaveBtn, cancelBtn: geminiKeyCancelBtn,
   statusEl: geminiKeyStatus,
 });
+
+if (gradientBoldToggle) {
+  gradientBoldToggle.addEventListener("change", () => {
+    const newVal = gradientBoldToggle.checked;
+    applyGradientBold(newVal);
+    gradientBoldToggle.setAttribute("aria-checked", newVal ? "true" : "false");
+    const s = loadSettings(); s.gradientBold = newVal; saveSettings(s);
+  });
+}
 
 if (vimToggle) {
   vimToggle.addEventListener("change", () => {

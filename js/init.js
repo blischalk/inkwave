@@ -2,7 +2,7 @@ import {
   contentEl, filenameEl,
   setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize,
 } from "./state.js";
-import { loadSettings } from "./settings.js";
+import { loadSettings, applyGradientBold } from "./settings.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
@@ -35,14 +35,18 @@ window.__applySettings = function (dataStr) {
     if (settings && settings.docFontSize) {
       setDocFontSize(Number(settings.docFontSize));
     }
+    if (settings && settings.gradientBold === "false") {
+      applyGradientBold(false);
+    }
   } catch (e) {}
 };
 
-// Restore font size from localStorage (for non-Python-injected settings path)
+// Restore appearance settings from localStorage (for non-Python-injected settings path)
 (function () {
   try {
     const s = loadSettings();
     if (s.docFontSize) setDocFontSize(Number(s.docFontSize));
+    if (s.gradientBold === false) applyGradientBold(false);
   } catch (e) {}
 })();
 

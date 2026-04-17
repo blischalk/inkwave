@@ -854,6 +854,13 @@ ul.md-list-container {
     color: transparent;
   }
 }
+body[data-bold-gradient="off"] .rendered strong,
+body[data-bold-gradient="off"] .rendered b {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  color: var(--bold-fallback, var(--accent)) !important;
+}
 .rendered table { border-collapse: collapse; width: 100%; margin: 1em 0; }
 .rendered th, .rendered td { border: 1px solid var(--border); padding: 0.5em 0.75em; text-align: left; }
 .rendered th { background: var(--code-bg); color: var(--accent); font-weight: 600; }
@@ -1091,7 +1098,7 @@ body:not([data-theme]) {
   --error: #f95959;
   --error-bg: rgba(249, 89, 89, 0.15);
   --bold-fallback: #dcb9fc;
-  --bold-gradient: linear-gradient(105deg, #f4569d, #0fb6d6, #45e0a2);
+  --bold-gradient: linear-gradient(135deg, #dcb9fc, #a78bfa);
 }
 
 /* Theme: Mocha (Catppuccin dark) */
@@ -1206,7 +1213,7 @@ body[data-theme="solarized-light"] {
   --error: #dc322f;
   --error-bg: rgba(220, 50, 47, 0.1);
   --bold-fallback: #268bd2;
-  --bold-gradient: linear-gradient(105deg, #268bd2, #2aa198, #859900);
+  --bold-gradient: linear-gradient(135deg, #268bd2, #2aa198);
 }
 
 /* Theme: High contrast (accessibility) */
@@ -1229,7 +1236,7 @@ body[data-theme="high-contrast"] {
   --error: #ff6b6b;
   --error-bg: rgba(255, 107, 107, 0.2);
   --bold-fallback: #00d4ff;
-  --bold-gradient: linear-gradient(105deg, #00d4ff, #7ec8ff, #ffb86c);
+  --bold-gradient: linear-gradient(135deg, #00d4ff, #7ec8ff);
 }
 
 /* Theme: Dracula */
@@ -1252,7 +1259,7 @@ body[data-theme="dracula"] {
   --error: #ff5555;
   --error-bg: rgba(255, 85, 85, 0.15);
   --bold-fallback: #bd93f9;
-  --bold-gradient: linear-gradient(105deg, #ff79c6, #bd93f9, #8be9fd);
+  --bold-gradient: linear-gradient(135deg, #ff79c6, #bd93f9);
 }
 
 /* Theme: Rose Pine */
@@ -1298,7 +1305,7 @@ body[data-theme="gruvbox"] {
   --error: #fb4934;
   --error-bg: rgba(251, 73, 52, 0.15);
   --bold-fallback: #fe8019;
-  --bold-gradient: linear-gradient(105deg, #fe8019, #fabd2f, #b8bb26);
+  --bold-gradient: linear-gradient(135deg, #fe8019, #fabd2f);
 }
 
 /* Theme: Lavender (soft purple light) */
