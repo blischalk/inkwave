@@ -1315,14 +1315,14 @@ body[data-theme="gruvbox"] {
   --border: #504945;
   --text: #ebdbb2;
   --muted: #a89984;
-  --accent: #d3869b;
+  --accent: #fe8019;
   --btn-text: #282828;
   --h1: #fb4934;
   --h2: #fe8019;
   --h3: #fabd2f;
   --h4: #b8bb26;
   --link: #83a598;
-  --code: #d3869b;
+  --code: #fabd2f;
   --code-bg: #504945;
   --blockquote-bg: #504945;
   --error: #fb4934;

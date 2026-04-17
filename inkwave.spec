@@ -1,12 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 import sys
+import importlib.util
 
 block_cipher = None
 
 # Icon paths (optional — build succeeds without them)
 icon_mac = 'icon.icns' if os.path.exists('icon.icns') else None
 icon_win = 'icon.ico'  if os.path.exists('icon.ico')  else None
+
+# Collect data files that PyInstaller misses for packages with non-Python assets.
+def _pkg_dir(name):
+    spec = importlib.util.find_spec(name)
+    return os.path.dirname(spec.origin) if spec else None
+
+extra_datas = []
+_rfc = _pkg_dir('rfc3987_syntax')
+if _rfc:
+    extra_datas.append((_rfc, 'rfc3987_syntax'))
 
 a = Analysis(
     ['app.py'],
@@ -18,7 +29,7 @@ a = Analysis(
         ('js',         'js'),
         ('vendor',     'vendor'),
         ('Welcome.md', '.'),
-    ],
+    ] + extra_datas,
     hiddenimports=['webview'],
     hookspath=[],
     hooksconfig={},
