@@ -683,7 +683,20 @@ def main():
     )
     object.__setattr__(api, "_window", window)
 
+    def _has_file_to_open():
+        """Check if a .md file is pending from argv or Apple Events."""
+        if _pending_open_paths:
+            return True
+        for arg in sys.argv[1:]:
+            if arg.startswith('-'):
+                continue
+            if arg.lower().endswith(MD_EXTENSIONS) and os.path.isfile(arg):
+                return True
+        return False
+
     def inject_welcome():
+        if _has_file_to_open():
+            return
         try:
             data = api.get_welcome()
             if data and data.get("content") is not None:
@@ -704,9 +717,73 @@ def main():
         except Exception:
             pass
 
+    _pending_open_paths = []
+
+    def _open_md_in_window(path):
+        """Read a .md file and send it to the JS frontend to open in a new tab."""
+        try:
+            path = os.path.abspath(path)
+            if not path.lower().endswith(MD_EXTENSIONS) or not os.path.isfile(path):
+                return
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            data = json.dumps({"root": os.path.dirname(path), "path": path, "content": content})
+            window.evaluate_js(
+                "if (window.__openFileFromArg) window.__openFileFromArg(" + json.dumps(data) + ");"
+            )
+        except Exception:
+            pass
+
+    def inject_open_file():
+        """Open any .md files from sys.argv or queued from Apple Events."""
+        try:
+            # Check sys.argv (running from source: python app.py file.md)
+            for arg in sys.argv[1:]:
+                if arg.startswith('-'):
+                    continue
+                if arg.lower().endswith(MD_EXTENSIONS) and os.path.isfile(arg):
+                    _open_md_in_window(arg)
+                    break
+            # Process any paths queued by the delegate before the window loaded
+            for p in _pending_open_paths:
+                _open_md_in_window(p)
+            _pending_open_paths.clear()
+        except Exception:
+            pass
+
+    # On macOS, add open-file handler to pywebview's existing AppDelegate.
+    if sys.platform == 'darwin':
+        try:
+            from webview.platforms.cocoa import BrowserView
+
+            def _app_openFile(self, app, filename):
+                _pending_open_paths.append(str(filename))
+                return True
+
+            def _app_openFiles(self, app, filenames):
+                for f in filenames:
+                    _pending_open_paths.append(str(f))
+
+            BrowserView.AppDelegate.application_openFile_ = _app_openFile
+            BrowserView.AppDelegate.application_openFiles_ = _app_openFiles
+
+            def _watch_open_queue():
+                """Background thread: process queued file-open requests."""
+                import time
+                while True:
+                    time.sleep(0.3)
+                    while _pending_open_paths:
+                        p = _pending_open_paths.pop(0)
+                        _open_md_in_window(p)
+
+            threading.Thread(target=_watch_open_queue, daemon=True).start()
+        except Exception:
+            pass
+
     try:
         window.events.loaded += inject_welcome
         window.events.loaded += inject_settings
+        window.events.loaded += inject_open_file
     except Exception:
         pass
 
