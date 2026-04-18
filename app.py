@@ -321,6 +321,27 @@ class Api:
         except Exception as e:
             return {"path": path, "content": None, "error": str(e)}
 
+    def read_image_base64(self, path):
+        """Return a data URL for a local image file."""
+        import base64, mimetypes, urllib.parse
+        if not path:
+            return None
+        path = urllib.parse.unquote(path)
+        path = os.path.normpath(path)
+        if not os.path.isfile(path):
+            return None
+        _IMG_EXTS = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif', '.avif')
+        if not path.lower().endswith(_IMG_EXTS):
+            return None
+        if os.path.getsize(path) > 20 * 1024 * 1024:
+            return None
+        mime = mimetypes.guess_type(path)[0] or "image/png"
+        try:
+            with open(path, "rb") as f:
+                return "data:" + mime + ";base64," + base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            return None
+
     def write_file(self, path, content):
         """Write content to a markdown file. Returns { path, error? }."""
         if not path:

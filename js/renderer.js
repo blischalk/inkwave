@@ -13,6 +13,23 @@ import {
 } from "./blocks.js";
 import { getTabTitle } from "./tabs.js";
 import { saveToFile } from "./fileio.js";
+
+function resolveImages(container, filePath) {
+  if (!filePath) return;
+  const dir = filePath.replace(/[^/\\]+$/, "");
+  container.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    if (src && !src.startsWith("http") && !src.startsWith("file:") && !src.startsWith("data:") && !src.startsWith("blob:") && !src.startsWith("//")) {
+      const absPath = dir + src;
+      const api = window.pywebview && window.pywebview.api;
+      if (api && typeof api.read_image_base64 === "function") {
+        api.read_image_base64(absPath).then((dataUrl) => {
+          if (dataUrl) img.src = dataUrl;
+        });
+      }
+    }
+  });
+}
 import { dbg } from "./debug.js";
 
 function applyDocFontSize() {
@@ -274,6 +291,7 @@ export function showTabContent(tab, preferredBlocks) {
       contentEl.className = "content read-mode";
       contentEl.innerHTML = html;
       highlightCodeInContainer(contentEl);
+      resolveImages(contentEl, tab.path);
     }
     applyDocFontSize();
     filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
