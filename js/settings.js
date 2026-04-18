@@ -1,4 +1,4 @@
-import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold } from "./state.js";
+import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold, fullWidth, setFullWidth } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
@@ -7,6 +7,7 @@ const settingsModal    = document.getElementById("settingsModal");
 const settingsCloseBtn = document.getElementById("settingsCloseBtn");
 const vimToggle           = document.getElementById("vimModeToggle");
 const gradientBoldToggle  = document.getElementById("gradientBoldToggle");
+const fullWidthToggle     = document.getElementById("fullWidthToggle");
 
 // Provider / model selects (settings panel)
 const llmProviderSelect = document.getElementById("llmProviderSelect");
@@ -81,6 +82,10 @@ export const PROVIDER_MODELS = {
 
 export function applyGradientBold(enabled) {
   document.body.setAttribute("data-bold-gradient", enabled ? "on" : "off");
+}
+
+export function applyFullWidth(enabled) {
+  document.body.setAttribute("data-full-width", enabled ? "true" : "false");
 }
 
 export function loadSettings() {
@@ -244,6 +249,15 @@ export function initSettings() {
     gradientBoldToggle.setAttribute("aria-checked", gradientBoldOn ? "true" : "false");
   }
 
+  // Full width content (default off)
+  const fullWidthOn = saved.fullWidth === true;
+  setFullWidth(fullWidthOn);
+  applyFullWidth(fullWidthOn);
+  if (fullWidthToggle) {
+    fullWidthToggle.checked = fullWidthOn;
+    fullWidthToggle.setAttribute("aria-checked", fullWidthOn ? "true" : "false");
+  }
+
   // Vim mode
   if (saved.vimMode === true) {
     setVimMode(true);
@@ -279,6 +293,10 @@ function openSettings() {
   if (gradientBoldToggle) {
     gradientBoldToggle.checked = gradientBold;
     gradientBoldToggle.setAttribute("aria-checked", gradientBold ? "true" : "false");
+  }
+  if (fullWidthToggle) {
+    fullWidthToggle.checked = fullWidth;
+    fullWidthToggle.setAttribute("aria-checked", fullWidth ? "true" : "false");
   }
   // Sync selects to current state (may have been changed via chat panel)
   if (llmProviderSelect) llmProviderSelect.value = llmProvider;
@@ -373,6 +391,16 @@ if (gradientBoldToggle) {
     applyGradientBold(newVal);
     gradientBoldToggle.setAttribute("aria-checked", newVal ? "true" : "false");
     const s = loadSettings(); s.gradientBold = newVal; saveSettings(s);
+  });
+}
+
+if (fullWidthToggle) {
+  fullWidthToggle.addEventListener("change", () => {
+    const newVal = fullWidthToggle.checked;
+    setFullWidth(newVal);
+    applyFullWidth(newVal);
+    fullWidthToggle.setAttribute("aria-checked", newVal ? "true" : "false");
+    const s = loadSettings(); s.fullWidth = newVal; saveSettings(s);
   });
 }
 
