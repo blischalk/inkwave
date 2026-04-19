@@ -48,6 +48,9 @@ export function setGradientBold(v) { gradientBold = v; }
 export let fullWidth = false;
 export function setFullWidth(v) { fullWidth = v; }
 
+export let dblClickEdit = true;
+export function setDblClickEdit(v) { dblClickEdit = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content");
 export const filenameEl      = document.getElementById("filename");

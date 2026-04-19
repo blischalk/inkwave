@@ -1,4 +1,4 @@
-import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold, fullWidth, setFullWidth } from "./state.js";
+import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold, fullWidth, setFullWidth, dblClickEdit, setDblClickEdit } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
@@ -8,6 +8,7 @@ const settingsCloseBtn = document.getElementById("settingsCloseBtn");
 const vimToggle           = document.getElementById("vimModeToggle");
 const gradientBoldToggle  = document.getElementById("gradientBoldToggle");
 const fullWidthToggle     = document.getElementById("fullWidthToggle");
+const dblClickEditToggle  = document.getElementById("dblClickEditToggle");
 
 // Provider / model selects (settings panel)
 const llmProviderSelect = document.getElementById("llmProviderSelect");
@@ -258,6 +259,14 @@ export function initSettings() {
     fullWidthToggle.setAttribute("aria-checked", fullWidthOn ? "true" : "false");
   }
 
+  // Double-click to edit (default on)
+  const dblClickEditOn = saved.dblClickEdit !== false;
+  setDblClickEdit(dblClickEditOn);
+  if (dblClickEditToggle) {
+    dblClickEditToggle.checked = dblClickEditOn;
+    dblClickEditToggle.setAttribute("aria-checked", dblClickEditOn ? "true" : "false");
+  }
+
   // Vim mode
   if (saved.vimMode === true) {
     setVimMode(true);
@@ -297,6 +306,10 @@ function openSettings() {
   if (fullWidthToggle) {
     fullWidthToggle.checked = fullWidth;
     fullWidthToggle.setAttribute("aria-checked", fullWidth ? "true" : "false");
+  }
+  if (dblClickEditToggle) {
+    dblClickEditToggle.checked = dblClickEdit;
+    dblClickEditToggle.setAttribute("aria-checked", dblClickEdit ? "true" : "false");
   }
   // Sync selects to current state (may have been changed via chat panel)
   if (llmProviderSelect) llmProviderSelect.value = llmProvider;
@@ -401,6 +414,15 @@ if (fullWidthToggle) {
     applyFullWidth(newVal);
     fullWidthToggle.setAttribute("aria-checked", newVal ? "true" : "false");
     const s = loadSettings(); s.fullWidth = newVal; saveSettings(s);
+  });
+}
+
+if (dblClickEditToggle) {
+  dblClickEditToggle.addEventListener("change", () => {
+    const newVal = dblClickEditToggle.checked;
+    setDblClickEdit(newVal);
+    dblClickEditToggle.setAttribute("aria-checked", newVal ? "true" : "false");
+    const s = loadSettings(); s.dblClickEdit = newVal; saveSettings(s);
   });
 }
 

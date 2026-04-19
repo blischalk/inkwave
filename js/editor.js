@@ -12,6 +12,7 @@ import { saveToFile } from "./fileio.js";
 import { getActiveTab } from "./tabs.js";
 import { dbg, DEBUG_ENTER } from "./debug.js";
 import { getYank } from "./vim.js";
+import { clearIfActive as clearSearch } from "./search.js";
 
 // startInlineEdit: sixth argument (cursorHint) can be:
 //   - a number → explicit character offset
@@ -19,6 +20,7 @@ import { getYank } from "./vim.js";
 //   - null/absent → cursor from click position
 export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorHint = null) {
   if (blockEl.classList.contains("editing")) return;
+  clearSearch();
   const raw = blockRaw(blocks[index]);
   const blockType = blocks[index].type || "paragraph";
   dbg(
