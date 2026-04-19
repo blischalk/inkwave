@@ -450,6 +450,7 @@ body[data-focus-mode="true"] .focus-exit:hover,
 body[data-focus-mode="true"] .focus-toc-btn:hover { opacity: 1; }
 
 .content-area {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1929,4 +1930,79 @@ body[data-theme="forest"] {
     background-clip: unset !important;
     color: var(--bold-fallback, var(--accent)) !important;
   }
+}
+
+/* ── Find-in-document search bar ──────────────────────────────────────────── */
+.search-bar {
+  position: absolute;
+  top: 8px;
+  right: 24px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--toolbar-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.search-bar[hidden] { display: none; }
+.search-input {
+  width: 200px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  outline: none;
+}
+.search-input:focus {
+  border-color: var(--accent);
+}
+.search-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  min-width: 56px;
+  text-align: center;
+  white-space: nowrap;
+}
+.search-nav,
+.search-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.search-nav:hover,
+.search-close:hover {
+  color: var(--text);
+  background: var(--code-bg);
+}
+.search-nav:focus,
+.search-close:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.search-close { font-size: 1.1rem; }
+
+/* ── Search highlights ────────────────────────────────────────────────────── */
+mark.search-highlight {
+  background: rgba(255, 255, 0, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0;
+}
+mark.search-highlight.search-current {
+  background: var(--accent);
+  color: var(--btn-text);
+  border-radius: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 0px;
 }

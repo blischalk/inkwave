@@ -1,6 +1,6 @@
 import {
   filenameEl,
-  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode, docFontSize,
+  currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode, docFontSize, dblClickEdit,
   setCurrentBlocks, setCurrentTabRef, setReplacingContent,
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
@@ -14,6 +14,7 @@ import {
 } from "./blocks.js";
 import { getTabTitle } from "./tabs.js";
 import { saveToFile } from "./fileio.js";
+import { isOpen as isSearchOpen } from "./search.js";
 
 function resolveImages(container, filePath) {
   if (!filePath) return;
@@ -327,6 +328,7 @@ export function showTabContent(tab, preferredBlocks) {
     // Wire double-click to start edit (single-click + drag can select text for copy)
     contentEl.querySelectorAll(".md-block").forEach((blockEl) => {
       blockEl.addEventListener("dblclick", (e) => {
+        if (!dblClickEdit || isSearchOpen()) return;
         if (e.target.classList && e.target.classList.contains("inline-edit"))
           return;
         const idx = parseInt(blockEl.getAttribute("data-block-index"), 10);
@@ -340,6 +342,7 @@ export function showTabContent(tab, preferredBlocks) {
         const pre = codeBlockEl.querySelector("pre");
         if (!pre) return;
         pre.addEventListener("dblclick", (e) => {
+          if (!dblClickEdit || isSearchOpen()) return;
           if (codeBlockEl.classList.contains("editing")) return;
           const idx = parseInt(codeBlockEl.getAttribute("data-block-index"), 10);
           if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
