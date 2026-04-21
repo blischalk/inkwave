@@ -19,6 +19,8 @@ import { getBlocks, blocksToContent } from "./blocks.js";
 import { getBlockModeContentOffset } from "./vim.js";
 import { render } from "./renderer.js";
 import { launchDoom } from "./doom.js";
+import { applySplit, closeSplit } from "./panes.js";
+import { splitMode } from "./state.js";
 
 // ── Easter egg ────────────────────────────────────────────────────────────────
 const _logo = document.querySelector(".app-logo");
@@ -402,6 +404,7 @@ function changeFontSize(delta) {
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "p") { e.preventDefault(); window.print(); return; }
   if (isPickerOpen()) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -609,3 +612,25 @@ document.addEventListener("drop", (e) => {
     }
   }
 });
+
+// ── Print / Save as PDF ───────────────────────────────────────────────────────
+const printBtn = document.getElementById('printBtn');
+if (printBtn) {
+  printBtn.addEventListener('click', () => window.print());
+}
+
+
+// ── Split screen ──────────────────────────────────────────────────────────────
+const splitVBtn = document.getElementById('splitVBtn');
+const splitHBtn = document.getElementById('splitHBtn');
+
+if (splitVBtn) {
+  splitVBtn.addEventListener('click', () => {
+    splitMode === 'vertical' ? closeSplit() : applySplit('vertical');
+  });
+}
+if (splitHBtn) {
+  splitHBtn.addEventListener('click', () => {
+    splitMode === 'horizontal' ? closeSplit() : applySplit('horizontal');
+  });
+}

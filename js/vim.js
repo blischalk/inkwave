@@ -6,7 +6,7 @@
 //   i/a/A/I enter startInlineEdit at the cursor's pixel coords.
 // Raw mode: full VimSession on the textarea.
 
-import { vimMode, contentEl, onStartInlineEdit, onShowTabContent, currentBlocks, setCurrentBlocks, currentTabRef } from "./state.js";
+import { vimMode, getContentEl, onStartInlineEdit, onShowTabContent, currentBlocks, setCurrentBlocks, currentTabRef } from "./state.js";
 import { getCaretOffset, renderedOffsetToSourceOffset, sourceOffsetToRenderedOffset, setCaretPosition } from "./caret.js";
 import { blockRaw, blockAndOffsetToContentOffset, contentOffsetToBlockAndOffset, blocksToContent, getBlocks } from "./blocks.js";
 import { saveToFile } from "./fileio.js";
@@ -30,6 +30,7 @@ function ensureFakeCursor() {
     fakeCursorEl.className = "vim-fake-cursor";
     fakeCursorEl.setAttribute("aria-hidden", "true");
   }
+  const contentEl = getContentEl();
   // contentEl.innerHTML replacements destroy the cursor — always re-append.
   if (contentEl && fakeCursorEl.parentNode !== contentEl) {
     contentEl.appendChild(fakeCursorEl);
@@ -40,6 +41,7 @@ function ensureFakeCursor() {
 }
 
 function positionFakeCursor() {
+  const contentEl = getContentEl();
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) { hideFakeCursor(); return; }
   const range = sel.getRangeAt(0);
@@ -94,6 +96,7 @@ function hideFakeCursor() {
 }
 
 function scrollToCursor() {
+  const contentEl = getContentEl();
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || !contentEl) return;
   const rect = sel.getRangeAt(0).getBoundingClientRect();
@@ -170,6 +173,7 @@ function deleteCurrentBlock() {
 }
 
 function allBlocks() {
+  const contentEl = getContentEl();
   return contentEl ? [...contentEl.querySelectorAll(".md-block")] : [];
 }
 
@@ -208,6 +212,7 @@ function applyRange(node, offset) {
 }
 
 function placeVimCursorAtBlock(blockIndex) {
+  const contentEl = getContentEl();
   if (!contentEl) return;
   const blocks = allBlocks();
   if (!blocks.length) return;
@@ -221,6 +226,7 @@ function placeVimCursorAtBlock(blockIndex) {
 }
 
 function placeAtContentStart() {
+  const contentEl = getContentEl();
   const rendered = contentEl && contentEl.querySelector(".rendered");
   if (!rendered) return;
   const w = document.createTreeWalker(rendered, NodeFilter.SHOW_TEXT);
@@ -230,6 +236,7 @@ function placeAtContentStart() {
 }
 
 function placeAtContentEnd() {
+  const contentEl = getContentEl();
   const rendered = contentEl && contentEl.querySelector(".rendered");
   if (!rendered) return;
   const w = document.createTreeWalker(rendered, NodeFilter.SHOW_TEXT);
@@ -403,6 +410,7 @@ function moveLine(forward) {
 
 /** Half or full page scroll in block mode; forward = down. */
 function movePageBlock(forward, half) {
+  const contentEl = getContentEl();
   if (!contentEl) return;
   ensureCursorInitialized();
   const amount = (half ? 0.5 : 1) * contentEl.clientHeight * (forward ? 1 : -1);
@@ -456,6 +464,7 @@ function enterInsertAtCursor() {
 
 export function initBlockNav(preferBlockIndex) {
   if (!vimMode) return;
+  const contentEl = getContentEl();
   if (contentEl && contentEl.querySelector(".raw-editor")) return;
   if (isInsertMode()) return; // don't stomp on an active inline edit (e.g. after 'o')
 
@@ -485,6 +494,7 @@ export function clearBlockNav() {
 
 /** Current content offset (for raw/block cursor sync). Returns null if not in block mode or no blocks. */
 export function getBlockModeContentOffset() {
+  const contentEl = getContentEl();
   if (!contentEl || contentEl.querySelector(".raw-editor")) return null;
   const blocks = currentBlocks;
   if (!blocks || blocks.length === 0) return null;
@@ -504,6 +514,7 @@ export function getBlockModeContentOffset() {
 
 /** Place block-mode cursor at content offset (for restoring after raw→block switch). */
 export function placeVimCursorAtContentOffset(contentOffset) {
+  const contentEl = getContentEl();
   if (!contentEl || contentEl.querySelector(".raw-editor") || contentOffset == null) return;
   const blocks = currentBlocks;
   if (!blocks || blocks.length === 0) return;
@@ -527,10 +538,10 @@ export function placeVimCursorAtContentOffset(contentOffset) {
 // ── MutationObserver: status only ────────────────────────────────────────────
 // Never modify any DOM class here — that would create an infinite loop.
 function watchBlockEditMode() {
-  if (!contentEl) return;
   const obs = new MutationObserver(() => {
     if (!vimMode) return;
-    if (contentEl.querySelector(".raw-editor")) return;
+    const contentEl = getContentEl();
+    if (contentEl && contentEl.querySelector(".raw-editor")) return;
     if (isInsertMode()) {
       hideFakeCursor();
       setStatus("-- INSERT --");
@@ -538,29 +549,30 @@ function watchBlockEditMode() {
       setStatus("-- NORMAL --");
     }
   });
-  obs.observe(contentEl, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
 }
-if (contentEl) { watchBlockEditMode(); }
-else { document.addEventListener("DOMContentLoaded", watchBlockEditMode, { once: true }); }
+document.addEventListener("DOMContentLoaded", watchBlockEditMode, { once: true });
+if (document.readyState !== "loading") watchBlockEditMode();
 
 // Click anywhere in content to position the vim cursor there.
-if (contentEl) {
-  contentEl.addEventListener("click", () => {
-    if (!vimMode || isInsertMode()) return;
-    if (contentEl.querySelector(".raw-editor")) return; // raw mode: leave textarea alone
-    // The click naturally placed a Selection — just update our state and show cursor.
-    const newIdx = getCurrentBlockIndex();
-    if (newIdx >= 0) lastBlockIndex = newIdx;
-    preferredX = null;
-    // Small delay so the browser has committed the click selection.
-    requestAnimationFrame(() => { positionFakeCursor(); setStatus("-- NORMAL --"); });
-  });
-}
+document.addEventListener("click", (e) => {
+  const contentEl = getContentEl();
+  if (!contentEl || !contentEl.contains(e.target)) return;
+  if (!vimMode || isInsertMode()) return;
+  if (contentEl.querySelector(".raw-editor")) return; // raw mode: leave textarea alone
+  // The click naturally placed a Selection — just update our state and show cursor.
+  const newIdx = getCurrentBlockIndex();
+  if (newIdx >= 0) lastBlockIndex = newIdx;
+  preferredX = null;
+  // Small delay so the browser has committed the click selection.
+  requestAnimationFrame(() => { positionFakeCursor(); setStatus("-- NORMAL --"); });
+});
 
 // ── Block-mode keydown handler ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
   if (!vimMode) return;
   // Raw mode: let the raw-editor textarea's own VimSession handle keys; do not run block nav.
+  const contentEl = getContentEl();
   if (contentEl && contentEl.querySelector(".raw-editor")) return;
   if (e.target && e.target.classList && e.target.classList.contains("raw-editor") && e.target.tagName === "TEXTAREA") return;
   if (isInsertMode()) return;
@@ -893,6 +905,7 @@ document.addEventListener("keydown", (e) => {
 }, true);
 
 function clearVisualHighlights() {
+  const contentEl = getContentEl();
   if (contentEl) {
     contentEl.querySelectorAll(".md-block.vim-visual-hl")
       .forEach(el => el.classList.remove("vim-visual-hl"));
@@ -903,6 +916,7 @@ function clearVisualHighlights() {
 }
 
 function addHighlightRects(range) {
+  const contentEl = getContentEl();
   if (!contentEl) return;
   const ceRect = contentEl.getBoundingClientRect();
   for (const rect of range.getClientRects()) {
@@ -920,6 +934,7 @@ function addHighlightRects(range) {
 }
 
 function extendBlockVisual() {
+  const contentEl = getContentEl();
   if (!blockVisualAnchor || !contentEl) { positionFakeCursor(); return; }
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) { positionFakeCursor(); return; }

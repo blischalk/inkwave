@@ -101,6 +101,47 @@
             <button
                 type="button"
                 class="btn btn-icon"
+                id="printBtn"
+                title="Print / Save as PDF (⌘P)"
+                aria-label="Print current file"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                     aria-hidden="true">
+                    <polyline points="6 9 6 2 18 2 18 9"/>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                    <rect x="6" y="14" width="12" height="8"/>
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
+                id="splitVBtn"
+                title="Split vertically"
+                aria-label="Split vertically"
+                aria-pressed="false"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="8" height="18" rx="1" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <rect x="13" y="3" width="8" height="18" rx="1" stroke="currentColor" stroke-width="2" fill="none"/>
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
+                id="splitHBtn"
+                title="Split horizontally"
+                aria-label="Split horizontally"
+                aria-pressed="false"
+            >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="8" rx="1" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <rect x="3" y="13" width="18" height="8" rx="1" stroke="currentColor" stroke-width="2" fill="none"/>
+                </svg>
+            </button>
+            <button
+                type="button"
+                class="btn btn-icon"
                 id="tocBtn"
                 title="Table of contents"
                 aria-label="Table of contents"
@@ -235,18 +276,26 @@
                     <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
             </button>
-            <div class="content-area">
-                <div class="content empty" id="content">Loading…</div>
+            <div class="content-area" id="contentArea">
+                <div class="pane-wrap" id="paneWrap">
+                    <div class="pane pane-primary" id="pane-primary">
+                        <div class="content empty" id="content-primary">Loading…</div>
+                    </div>
+                    <div class="pane-divider" id="paneDivider" hidden></div>
+                    <div class="pane pane-secondary" id="pane-secondary" hidden>
+                        <div class="content empty" id="content-secondary"></div>
+                    </div>
+                </div>
                 <div id="vimStatus" class="vim-status" aria-live="polite"></div>
             </div>
-            <div id="tocPanel" class="toc-panel">
+            <div id="tocPanel" class="toc-panel" inert>
                 <div class="toc-panel-header">
                     <span>Contents</span>
                     <button type="button" id="tocCloseBtn" class="toc-close-btn" aria-label="Close table of contents">×</button>
                 </div>
                 <div class="toc-panel-body" id="tocBody"></div>
             </div>
-            <div id="chatPanel" class="chat-panel">
+            <div id="chatPanel" class="chat-panel" inert>
                 <div class="chat-panel-header">
                     <span>AI Chat</span>
                     <button type="button" id="chatCloseBtn" class="chat-close-btn" aria-label="Close chat">×</button>

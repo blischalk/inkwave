@@ -108,7 +108,15 @@ export function openFile(path) {
   setSelectedPath(path);
   const existing = tabs.find((t) => t.path === path);
   if (existing) {
-    selectTab(existing.id);
+    const a = getApi();
+    if (a) {
+      a.read_file(path).then((data) => {
+        if (data && data.content != null) existing.content = data.content;
+        selectTab(existing.id);
+      }).catch(() => selectTab(existing.id));
+    } else {
+      selectTab(existing.id);
+    }
     return;
   }
   const a = getApi();

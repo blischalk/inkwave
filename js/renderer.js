@@ -1,9 +1,10 @@
 import {
-  contentEl, filenameEl,
+  filenameEl,
   currentBlocks, currentTabRef, welcomeContent, _replacingContent, rawMode, vimMode, docFontSize,
   setCurrentBlocks, setCurrentTabRef, setReplacingContent,
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
+  getContentEl,
 } from "./state.js";
 import { initBlockNav, clearBlockNav, applyVimMode, placeVimCursorAtContentOffset, scrollRawCursorIntoView } from "./vim.js";
 import { escapeHtml, highlightCodeInContainer } from "./utils.js";
@@ -16,8 +17,9 @@ import { saveToFile } from "./fileio.js";
 import { dbg } from "./debug.js";
 
 function applyDocFontSize() {
-  const el = contentEl.querySelector(".rendered, .raw-editor");
-  if (el) el.style.fontSize = docFontSize + "rem";
+  document.querySelectorAll('.pane .rendered, .pane .raw-editor').forEach(el => {
+    el.style.fontSize = docFontSize + "rem";
+  });
 }
 
 /** Update block raw so the first image has the given width/height (px). Handles ![alt](url) and <img>. */
@@ -147,6 +149,8 @@ function wireImageResize(container, tab, blocks) {
 
 export function showTabContent(tab, preferredBlocks) {
   if (!tab) return;
+  const contentEl = getContentEl();
+  if (!contentEl) return;
   setReplacingContent(true);
   try {
     // ── Raw mode: show the full file as an editable textarea ─────────────────
@@ -354,6 +358,8 @@ export function showTabContent(tab, preferredBlocks) {
 }
 
 export function showWelcomeOrEmpty() {
+  const contentEl = getContentEl();
+  if (!contentEl) return;
   if (welcomeContent) {
     contentEl.className = "content";
     contentEl.innerHTML =
@@ -370,7 +376,8 @@ export function showWelcomeOrEmpty() {
 }
 
 export function render(data) {
-  if (!data) return;
+  const contentEl = getContentEl();
+  if (!data || !contentEl) return;
   if (data.error) {
     contentEl.className = "content";
     contentEl.innerHTML =
@@ -401,7 +408,7 @@ document.addEventListener(
   "keydown",
   (e) => {
     if (e.key !== "Delete" && e.key !== "Backspace") return;
-    const selected = contentEl.querySelector(".md-image-wrap.md-image-selected");
+    const selected = document.querySelector(".md-image-wrap.md-image-selected");
     if (!selected) return;
     const blockEl = selected.closest(".md-block");
     if (!blockEl) return;
@@ -427,6 +434,6 @@ document.addEventListener(
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".md-image-wrap")) {
-    contentEl.querySelectorAll(".md-image-wrap.md-image-selected").forEach((w) => w.classList.remove("md-image-selected"));
+    document.querySelectorAll(".md-image-wrap.md-image-selected").forEach((w) => w.classList.remove("md-image-selected"));
   }
 });

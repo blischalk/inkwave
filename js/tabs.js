@@ -2,6 +2,9 @@ import {
   tabs, activeTabId, setActiveTabId,
   tabBarEl,
   onShowTabContent, onShowWelcomeOrEmpty,
+  primaryTabId, secondaryTabId, splitMode,
+  setPrimaryTabId, setSecondaryTabId,
+  activePane,
 } from "./state.js";
 import { escapeHtml } from "./utils.js";
 
@@ -25,12 +28,15 @@ export function addTab(options) {
   if (existing) {
     if (content != null) existing.content = content;
     selectTab(id);
-    return;
+    return existing;
   }
   tabs.push({ id: id, path: path, title: title, content: content });
   setActiveTabId(id);
+  if (activePane === 'secondary') setSecondaryTabId(id);
+  else setPrimaryTabId(id);
   renderTabBar();
   if (onShowTabContent) onShowTabContent(tabs[tabs.length - 1]);
+  return tabs[tabs.length - 1];
 }
 
 export function closeTab(id, e) {
@@ -38,13 +44,16 @@ export function closeTab(id, e) {
   const idx = tabs.findIndex((t) => t.id === id);
   if (idx === -1) return;
   tabs.splice(idx, 1);
+  if (id === secondaryTabId) setSecondaryTabId(null);
   if (activeTabId === id) {
     if (tabs.length > 0) {
       const next = tabs[Math.min(idx, tabs.length - 1)];
       setActiveTabId(next.id);
+      if (id === primaryTabId) setPrimaryTabId(next.id);
       if (onShowTabContent) onShowTabContent(next);
     } else {
       setActiveTabId(null);
+      if (id === primaryTabId) setPrimaryTabId(null);
       if (onShowWelcomeOrEmpty) onShowWelcomeOrEmpty();
     }
   }
@@ -53,6 +62,8 @@ export function closeTab(id, e) {
 
 export function selectTab(id) {
   setActiveTabId(id);
+  if (activePane === 'secondary') setSecondaryTabId(id);
+  else setPrimaryTabId(id);
   const tab = tabs.find((t) => t.id === id);
   if (tab && onShowTabContent) onShowTabContent(tab);
   renderTabBar();
@@ -82,7 +93,9 @@ export function renderTabBar() {
   tabs.forEach((tab, index) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "tab" + (tab.id === activeTabId ? " active" : "");
+    const isPrimary = tab.id === primaryTabId;
+    const isSecondary = splitMode !== 'none' && tab.id === secondaryTabId && tab.id !== primaryTabId;
+    btn.className = "tab" + (isPrimary ? " active" : "") + (isSecondary ? " active-secondary" : "");
     btn.setAttribute("data-tab-id", tab.id);
     btn.setAttribute("data-tab-index", index);
     btn.setAttribute("draggable", "true");

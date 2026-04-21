@@ -56,13 +56,14 @@ export function showChat() {
   // Hide TOC panel if open
   if (tocPanel && tocPanel.classList.contains("visible")) {
     tocPanel.classList.remove("visible");
+    tocPanel.setAttribute("inert", "");
     const tocBtn = document.getElementById("tocBtn");
     const focusTocBtn = document.getElementById("focusTocBtn");
     if (tocBtn) tocBtn.setAttribute("aria-pressed", "false");
     if (focusTocBtn) focusTocBtn.setAttribute("aria-pressed", "false");
   }
   chatVisible = true;
-  if (chatPanel) chatPanel.classList.add("visible");
+  if (chatPanel) { chatPanel.removeAttribute("inert"); chatPanel.classList.add("visible"); }
   if (chatBtn) chatBtn.setAttribute("aria-pressed", "true");
   syncChatProviderUI(llmProvider, llmModel);
   if (llmProvider === "ollama" && PROVIDER_MODELS.ollama.length === 0) {
@@ -73,7 +74,7 @@ export function showChat() {
 
 export function hideChat() {
   chatVisible = false;
-  if (chatPanel) chatPanel.classList.remove("visible");
+  if (chatPanel) { chatPanel.classList.remove("visible"); chatPanel.setAttribute("inert", ""); }
   if (chatBtn) chatBtn.setAttribute("aria-pressed", "false");
 }
 

@@ -454,7 +454,40 @@ body[data-focus-mode="true"] .focus-toc-btn:hover { opacity: 1; }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
+.pane-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
+}
+body[data-split="horizontal"] .pane-wrap { flex-direction: column; }
+.pane {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* hidden must beat display:flex from .pane */
+.pane[hidden], .pane-divider[hidden] { display: none !important; }
+/* active-pane highlight only visible when split is active */
+body[data-split] .pane.active-pane { box-shadow: inset 0 0 0 2px var(--accent); }
+.pane-divider {
+  position: relative;
+  width: 5px;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  z-index: 10;
+}
+body[data-split="horizontal"] .pane-divider { width: auto; height: 5px; cursor: row-resize; }
+.tab.active-secondary { color: var(--muted, #888); border-bottom-color: var(--muted, #888); }
 .content {
   flex: 1;
   overflow: auto;
@@ -1841,4 +1874,59 @@ body[data-theme="forest"] {
 .settings-apikey-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Zero page margins so the background can fill edge-to-edge on every page.
+   Per-page visual spacing is handled by box-decoration-break: clone below. */
+@page { margin: 0; }
+
+@media print {
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  html { height: auto; }
+  /* body gets the padding + clone so the margin repeats on every page fragment.
+     body is the true fragmenting root in paged media; its background propagates
+     to the canvas so the full page is always covered. */
+  body {
+    height: auto;
+    overflow: visible;
+    padding: 0.75in 0.85in;
+    box-sizing: border-box;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+
+  /* position:fixed background repeats on every page; sits behind body content */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: -1;
+  }
+
+  .toolbar,
+  #tabBar,
+  .sidebar,
+  .toc-panel,
+  .chat-panel,
+  #vimStatus,
+  .pane-divider,
+  #pane-secondary,
+  .vim-fake-cursor,
+  .md-image-resize-handle { display: none !important; }
+
+  .content-area { height: auto; overflow: visible; display: block; }
+  .pane-wrap { height: auto; overflow: visible; display: block; }
+  .pane.pane-primary { height: auto; overflow: visible; display: block; }
+  #content-primary { height: auto; overflow: visible; padding: 0; box-sizing: border-box; }
+  .pane.active-pane { box-shadow: none !important; }
+
+  /* Disable gradient text — background-clip:text renders blurry in PDF */
+  .rendered strong, .rendered b {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    color: var(--bold-fallback, var(--accent)) !important;
+  }
 }

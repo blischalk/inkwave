@@ -1,10 +1,10 @@
 import {
-  contentEl,
   currentBlocks, currentTabRef, _replacingContent,
   setCurrentBlocks,
   onShowTabContent,
   registerStartInlineEdit,
   vimMode,
+  getContentEl,
 } from "./state.js";
 import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
@@ -19,6 +19,7 @@ import { getYank } from "./vim.js";
 //   - null/absent → cursor from click position
 export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorHint = null) {
   if (blockEl.classList.contains("editing")) return;
+  const contentEl = blockEl.closest('.content') || document.querySelector('.content');
   const raw = blockRaw(blocks[index]);
   const blockType = blocks[index].type || "paragraph";
   dbg(
@@ -110,14 +111,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
     blockEl._vimSync = syncContentAndAutosave;
     const onListKeydown = (e) => {
       const k = (e.key || "").toLowerCase();
-      if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && (k === "o" || k === "p")) {
-        if (k === "o") {
-          e.preventDefault();
-          e.stopPropagation();
-          document.execCommand("insertLineBreak", false, null);
-          syncContentAndAutosave();
-          return;
-        }
+      if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && k === "p") {
         if (k === "p") {
           const yank = getYank();
           if (yank) {
@@ -414,14 +408,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
   blockEl._vimSync = syncContentAndAutosave;
   editable.addEventListener("keydown", (e) => {
     const k = (e.key || "").toLowerCase();
-    if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && (k === "o" || k === "p")) {
-      if (k === "o") {
-        e.preventDefault();
-        e.stopPropagation();
-        document.execCommand("insertLineBreak", false, null);
-        syncContentAndAutosave();
-        return;
-      }
+    if (vimMode && !e.ctrlKey && !e.metaKey && !e.altKey && k === "p") {
       if (k === "p") {
         const yank = getYank();
         if (yank) {
@@ -672,6 +659,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
 }
 
 export function handleEnterInBlock(editable, blockEl, index) {
+  const contentEl = blockEl.closest('.content') || document.querySelector('.content');
   const tab = getActiveTab() || currentTabRef;
   if (
     !tab ||
@@ -833,9 +821,9 @@ document.addEventListener(
               : "")
         : "null",
       "inContent:",
-      active ? contentEl.contains(active) : false,
+      active ? !!(active.closest && active.closest('.content')) : false,
     );
-    if (!active || !contentEl.contains(active)) return;
+    if (!active || !(active.closest && active.closest('.content'))) return;
     const editable =
       active.classList && active.classList.contains("inline-edit")
         ? active
@@ -869,7 +857,7 @@ document.addEventListener(
   (e) => {
     if (!DEBUG_ENTER) return;
     const t = e.target;
-    if (t && contentEl.contains(t)) {
+    if (t && t.closest && t.closest('.content')) {
       const isEdit =
         t.classList && t.classList.contains("inline-edit")
           ? "YES"
@@ -914,17 +902,11 @@ function handleInlineEditVimOP(e) {
   if (!vimMode) return false;
   const editingBlock =
     (e.target && e.target.closest && e.target.closest(".md-block.editing")) ||
-    (contentEl && contentEl.querySelector(".md-block.editing"));
+    document.querySelector(".md-block.editing");
   if (!editingBlock || typeof editingBlock._vimSync !== "function") return false;
   if (e.type === "beforeinput") {
     if (e.inputType !== "insertText" || e.data == null) return false;
     const key = (e.data.length === 1 ? e.data : "").toLowerCase();
-    if (key === "o") {
-      e.preventDefault();
-      document.execCommand("insertLineBreak", false, null);
-      editingBlock._vimSync();
-      return true;
-    }
     if (key === "p") {
       const yank = getYank();
       if (yank) {
@@ -939,14 +921,7 @@ function handleInlineEditVimOP(e) {
   // keydown
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   const k = (e.key || "").toLowerCase();
-  if (k !== "o" && k !== "p") return false;
-  if (k === "o") {
-    e.preventDefault();
-    e.stopPropagation();
-    document.execCommand("insertLineBreak", false, null);
-    editingBlock._vimSync();
-    return true;
-  }
+  if (k !== "p") return false;
   if (k === "p") {
     const yank = getYank();
     if (yank) {

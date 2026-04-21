@@ -48,8 +48,27 @@ export function setGradientBold(v) { gradientBold = v; }
 export let fullWidth = false;
 export function setFullWidth(v) { fullWidth = v; }
 
+export let splitMode = 'none'; // 'none' | 'vertical' | 'horizontal'
+export function setSplitMode(v) { splitMode = v; }
+
+export let activePane = 'primary';
+export function setActivePane(v) { activePane = v; }
+
+export let primaryTabId = null;
+export function setPrimaryTabId(v) { primaryTabId = v; }
+
+export let secondaryTabId = null;
+export function setSecondaryTabId(v) { secondaryTabId = v; }
+
+export function getContentEl() {
+  if (splitMode === 'none' || activePane === 'primary') {
+    return document.getElementById('content-primary');
+  }
+  return document.getElementById('content-secondary');
+}
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
-export const contentEl       = document.getElementById("content");
+export const contentEl       = document.getElementById("content-primary");
 export const filenameEl      = document.getElementById("filename");
 export const treeEl          = document.getElementById("tree");
 export const sidebar         = document.getElementById("sidebar");

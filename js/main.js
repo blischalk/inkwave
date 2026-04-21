@@ -17,16 +17,21 @@ import "./toc.js";
 import "./chat.js";
 import "./vim.js";
 import "./settings.js";
+import "./panes.js";
 
 import { applyTheme } from "./ui.js";
 import { initSettings } from "./settings.js";
 import { loadWelcome, whenApiReady } from "./init.js";
+import { initPanes } from "./panes.js";
 
 // Apply default theme before anything is shown.
 applyTheme("obsidianite");
 
 // Load persisted settings (vim mode, etc.)
 initSettings();
+
+// Initialize split-screen pane listeners.
+initPanes();
 
 // Start the welcome / API-ready sequence.
 if (document.readyState === "loading") {

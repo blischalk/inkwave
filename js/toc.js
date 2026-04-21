@@ -50,7 +50,7 @@ function renderToc() {
 
 function showToc() {
   tocVisible = true;
-  if (tocPanel) tocPanel.classList.add("visible");
+  if (tocPanel) { tocPanel.removeAttribute("inert"); tocPanel.classList.add("visible"); }
   if (tocBtn) tocBtn.setAttribute("aria-pressed", "true");
   if (focusTocBtn) focusTocBtn.setAttribute("aria-pressed", "true");
   renderToc();
@@ -58,7 +58,7 @@ function showToc() {
 
 function hideToc() {
   tocVisible = false;
-  if (tocPanel) tocPanel.classList.remove("visible");
+  if (tocPanel) { tocPanel.classList.remove("visible"); tocPanel.setAttribute("inert", ""); }
   if (tocBtn) tocBtn.setAttribute("aria-pressed", "false");
   if (focusTocBtn) focusTocBtn.setAttribute("aria-pressed", "false");
 }
