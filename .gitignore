@@ -1,5 +1,9 @@
 .env/
 settings.json
+node_modules/
+.venv/
+.coverage
+coverage/
 
 # PyInstaller build artifacts
 build/
