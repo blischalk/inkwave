@@ -186,3 +186,113 @@ class TestMarkedJsAvailability:
             assert result == 3, f"Expected 3 list items, got {result}"
 
         run_gui_test(check)
+
+
+class TestKeyboardShortcuts:
+    """Verify keyboard shortcuts work via dispatched events in real WebKit."""
+
+    def test_cmd_f_dispatches_correctly(self):
+        """Verify KeyboardEvent with metaKey dispatches in WebKit."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "f") caught = true;
+                    });
+                    var ev = new KeyboardEvent("keydown", {key: "f", metaKey: true, bubbles: true});
+                    document.dispatchEvent(ev);
+                    return caught;
+                })()
+            ''')
+            assert result is True, "Cmd+F keydown event not caught"
+
+        run_gui_test(check)
+
+    def test_escape_dispatches_correctly(self):
+        """Verify Escape KeyboardEvent dispatches in WebKit."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if (e.key === "Escape") caught = true;
+                    });
+                    document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
+                    return caught;
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+
+class TestSpecialCharacterRendering:
+    """Verify special characters survive the full rendering pipeline."""
+
+    def test_single_quotes_in_code_block(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("```\\n' OR 1=1 --\\n```");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return div.textContent.indexOf("OR 1=1") !== -1;
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+    def test_angle_brackets_in_code_block(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("```\\n<div>hello</div>\\n```");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return div.textContent.indexOf("<div>") !== -1;
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+    def test_unicode_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("Em-dash \\u2014 smart quotes \\u201chello\\u201d");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var text = div.textContent;
+                    return text.indexOf("\\u2014") !== -1 && text.indexOf("\\u201c") !== -1;
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+
+class TestLargeDocument:
+    """Verify the rendering pipeline handles large documents."""
+
+    def test_100_block_document(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var md = "";
+                    for (var i = 0; i < 100; i++) {
+                        md += "## Heading " + i + "\\n\\nParagraph " + i + " content.\\n\\n";
+                    }
+                    var tokens = marked.lexer(md);
+                    var html = marked.parse(md);
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var headings = div.querySelectorAll("h2");
+                    return headings.length;
+                })()
+            ''')
+            assert result == 100, f"Expected 100 headings, got {result}"
+
+        run_gui_test(check)
