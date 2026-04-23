@@ -18,12 +18,9 @@ export function getBlocks(content) {
               : String(t.raw)
             : "";
         if (t.type === "list") {
-          const lines = raw.split(/\r?\n/);
-          for (let j = 0; j < lines.length; j++) {
-            const line = lines[j];
-            if (/^\s*([-*]\s|\d+\.\s)/.test(line) && line.trim() !== "") {
-              out.push({ raw: line.replace(/^\s+/, ""), type: "list" });
-            }
+          for (const item of t.items || []) {
+            const r = (item.raw || "").replace(/[\s]+$/, "");
+            if (r) out.push({ raw: r, type: "list" });
           }
           continue;
         }
