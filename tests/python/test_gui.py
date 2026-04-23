@@ -296,3 +296,276 @@ class TestLargeDocument:
             assert result == 100, f"Expected 100 headings, got {result}"
 
         run_gui_test(check)
+
+
+class TestRendererPipeline:
+    """Test the full rendering pipeline: markdown → blocks → HTML DOM."""
+
+    def test_heading_renders_as_h_tag(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("# Hello World");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var h1 = div.querySelector("h1");
+                    return h1 ? h1.textContent : null;
+                })()
+            ''')
+            assert result == "Hello World"
+        run_gui_test(check)
+
+    def test_paragraph_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("Just a paragraph.");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return div.querySelector("p").textContent;
+                })()
+            ''')
+            assert result == "Just a paragraph."
+        run_gui_test(check)
+
+    def test_code_block_renders_in_pre(self):
+        def check(window):
+            result = window.evaluate_js(r'''
+                (function() {
+                    var html = marked.parse("```js\nconst x = 1;\n```");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var code = div.querySelector("pre code");
+                    return code ? code.textContent.trim() : null;
+                })()
+            ''')
+            assert result == "const x = 1;"
+        run_gui_test(check)
+
+    def test_checkbox_list_renders_inputs(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("- [x] Done\\n- [ ] Todo");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var checks = div.querySelectorAll('input[type="checkbox"]');
+                    return [checks.length, checks[0].checked, checks[1].checked];
+                })()
+            ''')
+            assert result[0] == 2
+            assert result[1] is True
+            assert result[2] is False
+        run_gui_test(check)
+
+    def test_link_renders_with_href(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("[Click here](https://example.com)");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var a = div.querySelector("a");
+                    return a ? [a.textContent, a.getAttribute("href")] : null;
+                })()
+            ''')
+            assert result[0] == "Click here"
+            assert result[1] == "https://example.com"
+        run_gui_test(check)
+
+    def test_bold_and_italic_render(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("**bold** and *italic*");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return [
+                        div.querySelector("strong") !== null,
+                        div.querySelector("em") !== null
+                    ];
+                })()
+            ''')
+            assert result == [True, True]
+        run_gui_test(check)
+
+    def test_table_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var md = "| A | B |\\n|---|---|\\n| 1 | 2 |\\n| 3 | 4 |";
+                    var html = marked.parse(md);
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var cells = div.querySelectorAll("td");
+                    return cells.length;
+                })()
+            ''')
+            assert result == 4
+        run_gui_test(check)
+
+    def test_blockquote_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("> This is a quote");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return div.querySelector("blockquote") !== null;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_nested_list_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var md = "- item 1\\n  - nested a\\n  - nested b\\n- item 2";
+                    var html = marked.parse(md);
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var uls = div.querySelectorAll("ul");
+                    return uls.length;
+                })()
+            ''')
+            assert result >= 2  # outer + nested
+        run_gui_test(check)
+
+    def test_horizontal_rule_renders(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("---");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    return div.querySelector("hr") !== null;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_image_renders_img_tag(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var html = marked.parse("![alt text](https://example.com/img.png)");
+                    var div = document.createElement("div");
+                    div.innerHTML = html;
+                    var img = div.querySelector("img");
+                    return img ? [img.getAttribute("alt"), img.getAttribute("src")] : null;
+                })()
+            ''')
+            assert result[0] == "alt text"
+            assert "example.com" in result[1]
+        run_gui_test(check)
+
+
+class TestEditorBehavior:
+    """Test inline editing behavior via evaluate_js."""
+
+    def test_contenteditable_creates_editable_element(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var div = document.createElement("div");
+                    div.contentEditable = "true";
+                    div.textContent = "Edit me";
+                    document.body.appendChild(div);
+                    return div.isContentEditable;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_contenteditable_text_can_be_read(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var div = document.createElement("div");
+                    div.contentEditable = "true";
+                    div.textContent = "Hello world";
+                    document.body.appendChild(div);
+                    return div.textContent;
+                })()
+            ''')
+            assert result == "Hello world"
+        run_gui_test(check)
+
+    def test_contenteditable_preserves_special_chars(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var div = document.createElement("div");
+                    div.contentEditable = "true";
+                    div.textContent = "SELECT * FROM users WHERE name = 'O\\'Brien'";
+                    document.body.appendChild(div);
+                    return div.textContent;
+                })()
+            ''')
+            assert "O'Brien" in result
+        run_gui_test(check)
+
+
+class TestUIKeyboardShortcuts:
+    """Test that keyboard shortcut events work in WebKit."""
+
+    def test_ctrl_s_event(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "s") caught = true;
+                    });
+                    document.dispatchEvent(new KeyboardEvent("keydown", {key: "s", metaKey: true, bubbles: true}));
+                    return caught;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_ctrl_plus_event(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "=") caught = true;
+                    });
+                    document.dispatchEvent(new KeyboardEvent("keydown", {key: "=", metaKey: true, bubbles: true}));
+                    return caught;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_ctrl_minus_event(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "-") caught = true;
+                    });
+                    document.dispatchEvent(new KeyboardEvent("keydown", {key: "-", metaKey: true, bubbles: true}));
+                    return caught;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
+
+    def test_ctrl_zero_event(self):
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var caught = false;
+                    document.addEventListener("keydown", function(e) {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "0") caught = true;
+                    });
+                    document.dispatchEvent(new KeyboardEvent("keydown", {key: "0", metaKey: true, bubbles: true}));
+                    return caught;
+                })()
+            ''')
+            assert result is True
+        run_gui_test(check)
