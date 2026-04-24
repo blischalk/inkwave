@@ -67,6 +67,9 @@ export function getContentEl() {
   return document.getElementById('content-secondary');
 }
 
+export let dblClickEdit = true;
+export function setDblClickEdit(v) { dblClickEdit = v; }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content-primary");
 export const filenameEl      = document.getElementById("filename");

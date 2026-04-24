@@ -9,6 +9,7 @@ import "./blocks.js";
 import "./caret.js";
 import "./tabs.js";
 import "./fileio.js";
+import "./search.js";
 import "./editor.js";     // registers onStartInlineEdit + inline-edit o/p keydown (must run before renderer)
 import "./renderer.js";   // registers onShowTabContent + onShowWelcomeOrEmpty
 import "./filetree.js";
