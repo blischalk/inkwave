@@ -264,6 +264,48 @@ document
     sidebar.querySelector(".sidebar-toggle").title = "Collapse file tree";
   });
 
+// ── Sidebar resize ────────────────────────────────────────────────────────────
+const SIDEBAR_MIN_W = 150;
+const SIDEBAR_MAX_W = 600;
+const SIDEBAR_WIDTH_KEY = "inkwave_sidebar_width";
+
+const sidebarResizeHandle = document.getElementById("sidebarResizeHandle");
+let _sidebarResizing = false;
+let _sidebarResizeStartX = 0;
+let _sidebarResizeStartW = 0;
+
+const _savedSidebarWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+if (_savedSidebarWidth) sidebar.style.setProperty("--sidebar-w", _savedSidebarWidth);
+
+sidebarResizeHandle.addEventListener("mousedown", (e) => {
+  if (sidebar.classList.contains("collapsed")) return;
+  _sidebarResizing = true;
+  _sidebarResizeStartX = e.clientX;
+  _sidebarResizeStartW = sidebar.getBoundingClientRect().width;
+  sidebar.classList.add("resizing");
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  e.preventDefault();
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (!_sidebarResizing) return;
+  const w = Math.max(
+    SIDEBAR_MIN_W,
+    Math.min(SIDEBAR_MAX_W, _sidebarResizeStartW + (e.clientX - _sidebarResizeStartX))
+  );
+  sidebar.style.setProperty("--sidebar-w", w + "px");
+});
+
+document.addEventListener("mouseup", () => {
+  if (!_sidebarResizing) return;
+  _sidebarResizing = false;
+  sidebar.classList.remove("resizing");
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebar.style.getPropertyValue("--sidebar-w"));
+});
+
 // ── New file button ───────────────────────────────────────────────────────────
 if (newFileBtn) newFileBtn.disabled = true;
 newFileBtn.addEventListener("click", () => {
