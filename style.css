@@ -889,6 +889,8 @@ ul.md-list-container {
 }
 .rendered pre code { background: none; padding: 0; }
 .rendered pre code:not(.hljs) { color: var(--text); }
+.rendered pre.mermaid { background: var(--code-bg); text-align: center; }
+.rendered pre.mermaid svg { max-width: 100%; height: auto; }
 .rendered hr { border: none; height: 1px; background: var(--border); margin: 1.2em 0; }
 .rendered a { color: var(--link); text-decoration: none; }
 .rendered a:hover { text-decoration: underline; }

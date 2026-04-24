@@ -19,6 +19,11 @@ if os.name == "nt":
 
 import webview
 
+import logging
+from logging.handlers import RotatingFileHandler
+
+logger = logging.getLogger("inkwave")
+
 try:
     import anthropic as _anthropic
     _ANTHROPIC_AVAILABLE = True
@@ -311,6 +316,7 @@ class Api:
 
     def read_file(self, path):
         """Read a markdown file and return content."""
+        logger.debug("read_file: %s", path)
         if not path or not os.path.isfile(path):
             return {"path": path, "content": None, "error": "File not found."}
         if not path.lower().endswith(MD_EXTENSIONS):
@@ -344,6 +350,7 @@ class Api:
 
     def write_file(self, path, content):
         """Write content to a markdown file. Returns { path, error? }."""
+        logger.debug("write_file: %s", path)
         if not path:
             return {"path": path, "error": "No path."}
         if not path.lower().endswith(MD_EXTENSIONS):
@@ -480,12 +487,15 @@ class Api:
         """Load all persisted settings. Returns a dict (empty if none saved)."""
         try:
             with open(self._settings_path(), "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                logger.debug("load_settings: %d keys", len(data))
+                return data
         except Exception:
             return {}
 
     def save_setting(self, key, value):
         """Persist a single setting by key."""
+        logger.debug("save_setting: %s", key)
         try:
             path = self._settings_path()
             try:
@@ -689,6 +699,27 @@ def main():
 
     # DevTools: set PYWEBVIEW_DEBUG=1 or run with --debug. Port must be set before create_window.
     debug = os.environ.get("PYWEBVIEW_DEBUG", "").strip().lower() in ("1", "true", "yes") or "--debug" in sys.argv
+
+    # ── Logging setup ──
+    log_level = logging.DEBUG if debug else logging.WARNING
+    fmt = logging.Formatter("%(asctime)s [%(name)s] %(levelname)s %(message)s")
+    console_h = logging.StreamHandler()
+    console_h.setFormatter(fmt)
+    logging.root.addHandler(console_h)
+    logging.root.setLevel(log_level)
+    try:
+        log_dir = _user_data_dir()
+        os.makedirs(log_dir, exist_ok=True)
+        file_h = RotatingFileHandler(
+            os.path.join(log_dir, "inkwave.log"),
+            maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8",
+        )
+        file_h.setFormatter(fmt)
+        logging.root.addHandler(file_h)
+    except Exception:
+        logger.debug("Could not set up file logging", exc_info=True)
+
+    logger.info("Inkwave starting (debug=%s)", debug)
     if debug:
         webview.settings["REMOTE_DEBUGGING_PORT"] = 9222
         webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
@@ -874,9 +905,9 @@ def main():
 
     start_kw = {"debug": debug}
     if debug:
-        print("DevTools: In Edge or Chrome open edge://inspect or chrome://inspect")
-        print("          Click 'Configure' under 'Discover network targets' and add: localhost:9222")
-        print("          Then the app should appear there; click 'Inspect' to open DevTools.")
+        logger.info("DevTools: In Edge or Chrome open edge://inspect or chrome://inspect")
+        logger.info("          Click 'Configure' under 'Discover network targets' and add: localhost:9222")
+        logger.info("          Then the app should appear there; click 'Inspect' to open DevTools.")
     if os.name == "nt":
         start_kw["gui"] = "edgechromium"
     webview.start(**start_kw)
