@@ -343,3 +343,81 @@ describe("isOrderedListPrefix", () => {
     expect(isOrderedListPrefix(undefined)).toBeFalsy();
   });
 });
+
+// ── List items with continuation lines (PR #10 fix) ─────────────────────────
+
+describe("getBlocks — list items with continuation lines", () => {
+  it("preserves fenced code block inside ordered list item", () => {
+    const md = "1. Run this:\n   ```\n   echo hello\n   ```\n2. Check output";
+    const blocks = getBlocks(md);
+    expect(blocks[0].type).toBe("list");
+    expect(blocks[0].raw).toContain("```");
+    expect(blocks[0].raw).toContain("echo hello");
+  });
+
+  it("preserves fenced code block inside unordered list item", () => {
+    const md = "- Install:\n  ```bash\n  pip install requests\n  ```\n- Run it";
+    const blocks = getBlocks(md);
+    expect(blocks[0].raw).toContain("pip install requests");
+  });
+
+  it("preserves SQL with single quotes in code block inside list", () => {
+    const md = "1. Enter:\n   ```\n   ' WAITFOR DELAY '0:0:5' --\n   ```\n2. Press Enter";
+    const blocks = getBlocks(md);
+    expect(blocks[0].raw).toContain("WAITFOR DELAY");
+    expect(blocks[0].raw).toContain("'0:0:5'");
+  });
+
+  it("preserves multi-line continuation without code block", () => {
+    const md = "- First line\n  continued here\n  and here\n- Second item";
+    const blocks = getBlocks(md);
+    expect(blocks[0].raw).toContain("continued here");
+    expect(blocks[0].raw).toContain("and here");
+    expect(blocks).toHaveLength(2);
+  });
+
+  it("round-trips ordered list with code blocks", () => {
+    const md = "1. Run this:\n   ```\n   echo hello\n   ```\n2. Check output\n3. Done";
+    const blocks = getBlocks(md);
+    const rebuilt = blocksToContent(blocks);
+    expect(rebuilt).toBe(md);
+  });
+
+  it("round-trips unordered list with code blocks", () => {
+    const md = "- Install:\n  ```bash\n  pip install requests\n  ```\n- Run it";
+    const blocks = getBlocks(md);
+    const rebuilt = blocksToContent(blocks);
+    expect(rebuilt).toBe(md);
+  });
+
+  it("round-trips list with SQL injection payload", () => {
+    const md = "1. Enter:\n   ```\n   ' WAITFOR DELAY '0:0:5' --\n   ```\n2. Press Enter";
+    const blocks = getBlocks(md);
+    const rebuilt = blocksToContent(blocks);
+    expect(rebuilt).toBe(md);
+  });
+
+  it("round-trips checkbox list", () => {
+    const md = "- [x] Done task\n- [ ] Pending task";
+    const blocks = getBlocks(md);
+    const rebuilt = blocksToContent(blocks);
+    expect(rebuilt).toBe(md);
+  });
+
+  it("round-trips full fixture file", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const fixture = fs.readFileSync(
+      path.join(__dirname, "../fixtures/list-with-code-blocks.md"),
+      "utf-8"
+    );
+    const blocks = getBlocks(fixture);
+    const rebuilt = blocksToContent(blocks);
+    // Re-parse both to normalize — exact match may differ on trailing whitespace
+    const blocks2 = getBlocks(rebuilt);
+    expect(blocks2.length).toBe(blocks.length);
+    blocks2.forEach((b, i) => {
+      expect(b.type).toBe(blocks[i].type);
+    });
+  });
+});

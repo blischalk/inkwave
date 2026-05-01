@@ -21,6 +21,7 @@ import { render } from "./renderer.js";
 import { launchDoom } from "./doom.js";
 import { applySplit, closeSplit } from "./panes.js";
 import { splitMode } from "./state.js";
+import { open as openSearch, close as closeSearch, isOpen as isSearchOpen } from "./search.js";
 
 // ── Easter egg ────────────────────────────────────────────────────────────────
 const _logo = document.querySelector(".app-logo");
@@ -472,9 +473,19 @@ document.addEventListener("keydown", (e) => {
       return;
     }
   }
+  if (e.key === "Escape" && isSearchOpen()) {
+    e.preventDefault();
+    closeSearch();
+    return;
+  }
   if (e.key === "Escape" && isFocusMode()) {
     setFocusMode(false);
     e.preventDefault();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+    e.preventDefault();
+    openSearch();
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
