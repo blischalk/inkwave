@@ -8,7 +8,7 @@
 
 import { vimMode, getContentEl, onStartInlineEdit, onShowTabContent, currentBlocks, setCurrentBlocks, currentTabRef } from "./state.js";
 import { getCaretOffset, renderedOffsetToSourceOffset, sourceOffsetToRenderedOffset, setCaretPosition } from "./caret.js";
-import { blockRaw, blockAndOffsetToContentOffset, contentOffsetToBlockAndOffset, blocksToContent, getBlocks } from "./blocks.js";
+import { blockRaw, blockAndOffsetToContentOffset, contentOffsetToBlockAndOffset, blocksToContent, getBlocks, moveListItemInBlocks } from "./blocks.js";
 import { saveToFile } from "./fileio.js";
 
 // ── Status bar ─────────────────────────────────────────────────────────────────
@@ -756,6 +756,31 @@ document.addEventListener("keydown", (e) => {
     }
   }
 
+  // Cmd+Shift+Up / Cmd+Shift+Down: move list item in normal mode
+  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.metaKey && e.shiftKey) {
+    if (currentBlocks[lastBlockIndex] && currentBlocks[lastBlockIndex].type === "list") {
+      e.preventDefault();
+      pushBlockUndo();
+      const direction = e.key === "ArrowUp" ? "up" : "down";
+      const newIndex = moveListItemInBlocks(currentBlocks, lastBlockIndex, direction);
+      if (newIndex >= 0) {
+        currentTabRef.content = blocksToContent(currentBlocks);
+        setCurrentBlocks(currentBlocks);
+        saveToFile(currentTabRef);
+        requestAnimationFrame(() => {
+          if (onShowTabContent) onShowTabContent(currentTabRef, currentBlocks);
+          setTimeout(() => {
+            lastBlockIndex = newIndex;
+            placeVimCursorAtBlock(newIndex);
+            positionFakeCursor();
+            setStatus("-- NORMAL --");
+          }, 0);
+        });
+      }
+    }
+    return;
+  }
+
   switch (e.key) {
     case "v":
     case "V":
@@ -863,6 +888,32 @@ document.addEventListener("keydown", (e) => {
           if (newBlockEl && onStartInlineEdit) {
             lastBlockIndex = oIdx + 1;
             onStartInlineEdit(newBlockEl, oIdx + 1, currentBlocks, currentTabRef, null, null);
+          }
+        }, 0);
+      });
+      break;
+    }
+
+    case "O": {
+      e.preventDefault();
+      clearVisualHighlights(); blockVisualMode = false; blockVisualAnchor = null;
+      ensureCursorInitialized();
+      pushBlockUndo();
+      const OIdx = lastBlockIndex;
+      currentBlocks.splice(OIdx, 0, { raw: "", type: "paragraph" });
+      currentTabRef.content = blocksToContent(currentBlocks);
+      setCurrentBlocks(currentBlocks);
+      saveToFile(currentTabRef);
+      hideFakeCursor();
+      const OSel = window.getSelection();
+      if (OSel) OSel.removeAllRanges();
+      requestAnimationFrame(() => {
+        if (onShowTabContent) onShowTabContent(currentTabRef, currentBlocks);
+        setTimeout(() => {
+          const newBlockEl = contentEl.querySelector('.md-block[data-block-index="' + OIdx + '"]');
+          if (newBlockEl && onStartInlineEdit) {
+            lastBlockIndex = OIdx;
+            onStartInlineEdit(newBlockEl, OIdx, currentBlocks, currentTabRef, null, null);
           }
         }, 0);
       });

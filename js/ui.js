@@ -1,5 +1,5 @@
 import {
-  contentEl, filenameEl,
+  contentEl, filenameEl, getContentEl,
   sidebar, openBtn, openMenu, newFileBtn, copyBtn,
   treeContextMenu, newFileHereBtn, treeWrap, deleteFileBtn,
   focusBtn, focusExitBtn,
@@ -167,13 +167,16 @@ document.addEventListener("copy", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "a" || (!e.metaKey && !e.ctrlKey)) return;
-  const activeInContent = contentEl && contentEl.contains(document.activeElement);
-  const sel = document.getSelection();
-  const selectionInContent = sel?.anchorNode && contentEl?.contains(sel.anchorNode);
-  if (!activeInContent && !selectionInContent) return;
-  const rendered = contentEl?.querySelector(".rendered");
+  const activeEl = document.activeElement;
+  const inEditable = activeEl && (activeEl.isContentEditable || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "INPUT");
+  if (inEditable) return;
+  const activeContentEl = getContentEl();
+  const rendered = activeContentEl?.querySelector(".rendered");
   if (!rendered) return;
   e.preventDefault();
+  if (!rendered.hasAttribute("tabindex")) rendered.setAttribute("tabindex", "-1");
+  rendered.focus({ preventScroll: true });
+  const sel = window.getSelection();
   const range = document.createRange();
   range.selectNodeContents(rendered);
   sel.removeAllRanges();

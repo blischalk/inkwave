@@ -16,6 +16,55 @@ import { getTabTitle } from "./tabs.js";
 import { saveToFile } from "./fileio.js";
 import { isOpen as isSearchOpen } from "./search.js";
 
+// ── Footnote rendering ────────────────────────────────────────────────────────
+// marked-footnote cannot work with per-block parsing, so footnotes are handled
+// in three custom passes: collect definitions, substitute inline refs, render section.
+
+function collectFootnotes(blocks) {
+  const defs = new Map();
+  let counter = 0;
+  const defLine = /^\[\^([^\]]+)\]:\s*(.+)/;
+  blocks.forEach((b, idx) => {
+    const raw = blockRaw(b).trim();
+    if (!raw.startsWith("[^")) return;
+    for (const line of raw.split(/\r?\n/)) {
+      const m = line.match(defLine);
+      if (m && !defs.has(m[1])) {
+        counter++;
+        defs.set(m[1], { num: counter, text: m[2].trim(), blockIndex: idx });
+      }
+    }
+  });
+  return defs;
+}
+
+function applyFootnoteRefs(raw, footnoteDefs) {
+  const refCounts = new Map();
+  return raw.replace(/\[\^([^\]]+)\]/g, (match, id) => {
+    const def = footnoteDefs.get(id);
+    if (!def) return match;
+    const safeId = escapeHtml(id);
+    const count = (refCounts.get(id) || 0) + 1;
+    refCounts.set(id, count);
+    const refId = count === 1 ? `fnref-${safeId}` : `fnref-${safeId}-${count}`;
+    return `<sup id="${refId}"><a href="#fn-${safeId}" class="footnote-ref">${def.num}</a></sup>`;
+  });
+}
+
+function renderFootnoteSection(footnoteDefs) {
+  if (footnoteDefs.size === 0) return "";
+  let html = '<div class="footnotes"><hr><ol>';
+  for (const [id, def] of footnoteDefs) {
+    const safeId = escapeHtml(id);
+    const innerHtml = marked.parse(def.text).replace(/^<p>|<\/p>\s*$/g, "");
+    html += `<li id="fn-${safeId}" class="md-block md-block-paragraph" data-block-index="${def.blockIndex}">`;
+    html += `${innerHtml} <a href="#fnref-${safeId}" class="footnote-backref" aria-label="Back to reference">↩</a>`;
+    html += `</li>`;
+  }
+  html += "</ol></div>";
+  return html;
+}
+
 function resolveImages(container, filePath) {
   if (!filePath) return;
   const dir = filePath.replace(/[^/\\]+$/, "");
@@ -244,10 +293,19 @@ export function showTabContent(tab, preferredBlocks) {
       highlightCodeInContainer(contentEl);
       setCurrentBlocks([{ raw: "", type: "paragraph" }]);
     } else {
+      const footnoteDefs = collectFootnotes(blocks);
+      const footnoteBlockIndices = new Set([...footnoteDefs.values()].map(d => d.blockIndex));
       let html = '<div class="rendered">';
       let i = 0;
       while (i < blocks.length) {
         const b = blocks[i];
+
+        // Footnote definition blocks are rendered only in the footnotes section below.
+        if (footnoteBlockIndices.has(i)) {
+          i++;
+          continue;
+        }
+
         const raw = blockRaw(b);
         const type = typeof b === "string" ? "paragraph" : b.type || "paragraph";
         if (type === "list") {
@@ -267,7 +325,7 @@ export function showTabContent(tab, preferredBlocks) {
               '<li class="md-block md-block-list" data-block-index="' +
               i +
               '">' +
-              getListItemDisplayHtml(lraw) +
+              getListItemDisplayHtml(applyFootnoteRefs(lraw, footnoteDefs)) +
               "</li>";
             i++;
           }
@@ -282,16 +340,18 @@ export function showTabContent(tab, preferredBlocks) {
           escapeHtml(type) +
           (type === "heading" && depth ? " md-block-heading-" + depth : "") +
           (isEmpty ? " md-block-empty" : "");
+        const parsedRaw = type !== "code" ? applyFootnoteRefs(raw, footnoteDefs) : raw;
         html +=
           '<div class="md-block ' +
           typeClass +
           '" data-block-index="' +
           i +
           '">' +
-          marked.parse(raw) +
+          marked.parse(parsedRaw) +
           "</div>";
         i++;
       }
+      html += renderFootnoteSection(footnoteDefs);
       html += "</div>";
       contentEl.className = "content read-mode";
       contentEl.innerHTML = html;

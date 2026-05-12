@@ -9,6 +9,7 @@ import {
   getListPrefix,
   stripListMarker,
   isOrderedListPrefix,
+  moveListItemInBlocks,
 } from "../../js/blocks.js";
 
 // ── getBlocks ────────────────────────────────────────────────────────────────
@@ -316,6 +317,90 @@ describe("stripListMarker", () => {
   it("returns empty string for null/undefined", () => {
     expect(stripListMarker(null)).toBe("");
     expect(stripListMarker(undefined)).toBe("");
+  });
+});
+
+// ── moveListItemInBlocks ─────────────────────────────────────────────────────
+
+describe("moveListItemInBlocks", () => {
+  it("moves a list item up by swapping with the previous block", () => {
+    const blocks = [
+      { raw: "- alpha", type: "list" },
+      { raw: "- beta", type: "list" },
+    ];
+    const newIndex = moveListItemInBlocks(blocks, 1, "up");
+    expect(newIndex).toBe(0);
+    expect(blocks[0].raw).toBe("- beta");
+    expect(blocks[1].raw).toBe("- alpha");
+  });
+
+  it("moves a list item down by swapping with the next block", () => {
+    const blocks = [
+      { raw: "- alpha", type: "list" },
+      { raw: "- beta", type: "list" },
+    ];
+    const newIndex = moveListItemInBlocks(blocks, 0, "down");
+    expect(newIndex).toBe(1);
+    expect(blocks[0].raw).toBe("- beta");
+    expect(blocks[1].raw).toBe("- alpha");
+  });
+
+  it("returns -1 when moving up from the first position", () => {
+    const blocks = [{ raw: "- only", type: "list" }];
+    expect(moveListItemInBlocks(blocks, 0, "up")).toBe(-1);
+  });
+
+  it("returns -1 when moving down from the last position", () => {
+    const blocks = [{ raw: "- only", type: "list" }];
+    expect(moveListItemInBlocks(blocks, 0, "down")).toBe(-1);
+  });
+
+  it("returns -1 when the adjacent block is not a list", () => {
+    const blocks = [
+      { raw: "# Heading", type: "heading" },
+      { raw: "- item", type: "list" },
+    ];
+    expect(moveListItemInBlocks(blocks, 1, "up")).toBe(-1);
+  });
+
+  it("returns -1 when the current block is not a list", () => {
+    const blocks = [
+      { raw: "para", type: "paragraph" },
+      { raw: "- item", type: "list" },
+    ];
+    expect(moveListItemInBlocks(blocks, 0, "down")).toBe(-1);
+  });
+
+  it("returns -1 for an out-of-range index", () => {
+    const blocks = [{ raw: "- item", type: "list" }];
+    expect(moveListItemInBlocks(blocks, -1, "up")).toBe(-1);
+    expect(moveListItemInBlocks(blocks, 5, "down")).toBe(-1);
+  });
+
+  it("returns -1 for a null blocks array", () => {
+    expect(moveListItemInBlocks(null, 0, "up")).toBe(-1);
+  });
+
+  it("preserves all other blocks unchanged after a move", () => {
+    const blocks = [
+      { raw: "- first", type: "list" },
+      { raw: "- second", type: "list" },
+      { raw: "- third", type: "list" },
+    ];
+    moveListItemInBlocks(blocks, 1, "up");
+    expect(blocks[2].raw).toBe("- third");
+  });
+
+  it("works with indented list items stored as list type", () => {
+    const blocks = [
+      { raw: "- parent item", type: "list" },
+      { raw: "- sub item 1", type: "list" },
+      { raw: "- sub item 2", type: "list" },
+    ];
+    const newIndex = moveListItemInBlocks(blocks, 2, "up");
+    expect(newIndex).toBe(1);
+    expect(blocks[1].raw).toBe("- sub item 2");
+    expect(blocks[2].raw).toBe("- sub item 1");
   });
 });
 

@@ -128,6 +128,18 @@ export function getListItemDisplayHtml(raw) {
   return li ? li.innerHTML : escapeHtml(stripListMarker(raw));
 }
 
+export function moveListItemInBlocks(blocks, index, direction) {
+  if (!blocks || index < 0 || index >= blocks.length) return -1;
+  if (!blocks[index] || blocks[index].type !== "list") return -1;
+  const targetIndex = direction === "up" ? index - 1 : index + 1;
+  if (targetIndex < 0 || targetIndex >= blocks.length) return -1;
+  if (!blocks[targetIndex] || blocks[targetIndex].type !== "list") return -1;
+  const temp = blocks[index];
+  blocks[index] = blocks[targetIndex];
+  blocks[targetIndex] = temp;
+  return targetIndex;
+}
+
 export function applyBlockTypeFromText(blockEl, text) {
   if (!blockEl || !blockEl.classList) return;
   const info = getInlineBlockType(text);
