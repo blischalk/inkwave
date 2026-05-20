@@ -414,6 +414,9 @@ export function showTabContent(tab, preferredBlocks) {
     // Click anywhere in content area (including padding/empty space) but not on a block → new paragraph
     contentEl.onclick = (e) => {
       if (e.target.closest(".md-block")) return;
+      if (e.target.closest(".md-list-container")) return;
+      const _sel = window.getSelection();
+      if (_sel && _sel.toString().length > 0) return;
       if (!currentTabRef || !currentBlocks) return;
       if (!contentEl.querySelector(".rendered")) return;
       const blocks = currentBlocks.slice();

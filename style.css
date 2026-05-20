@@ -364,6 +364,29 @@ body {
   cursor: pointer;
 }
 .context-menu button:hover { background: var(--code-bg); }
+#copyContextMenu {
+  display: none;
+  position: fixed;
+  z-index: 200;
+  min-width: 100px;
+  padding: 4px 0;
+  background: var(--toolbar-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+#copyContextMenu button {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+#copyContextMenu button:hover { background: var(--code-bg); }
 .show-sidebar-btn {
   display: none;
   position: fixed;
@@ -894,7 +917,7 @@ ul.md-list-container {
 .rendered pre code:not(.hljs) { color: var(--text); }
 .rendered pre.mermaid { background: var(--code-bg); text-align: center; }
 .rendered pre.mermaid svg { max-width: 100%; height: auto; }
-.rendered hr { border: none; height: 1px; background: var(--border); margin: 1.2em 0; }
+.rendered hr { border: none; height: 1px; background: color-mix(in srgb, var(--text) 25%, transparent); margin: 1.5em 0; }
 /* Footnotes (rendered by marked-footnote) */
 .rendered .footnotes { border-top: 1px solid var(--border); margin-top: 2em; padding-top: 0.75em; font-size: 0.85em; color: var(--muted, var(--text)); }
 .rendered .footnotes ol { padding-left: 1.5em; }
@@ -1506,6 +1529,29 @@ body[data-theme="molokai"] {
   --error-bg: rgba(249, 38, 114, 0.15);
   --bold-fallback: #ae81ff;
   --bold-gradient: linear-gradient(105deg, #f92672, #ae81ff);
+}
+
+/* Theme: Slime (neon-green Molokai variant) */
+body[data-theme="slime"] {
+  --bg: #181c18;
+  --toolbar-bg: #121512;
+  --border: #2a302a;
+  --text: #f8f8f2;
+  --muted: #75715e;
+  --accent: #39ff14;
+  --btn-text: #0c1a0c;
+  --h1: #39ff14;
+  --h2: #66d9ef;
+  --h3: #e6db74;
+  --h4: #ae81ff;
+  --link: #66d9ef;
+  --code: #ae81ff;
+  --code-bg: #1e221e;
+  --blockquote-bg: #1e221e;
+  --error: #ff5555;
+  --error-bg: rgba(255, 85, 85, 0.15);
+  --bold-fallback: #66d9ef;
+  --bold-gradient: linear-gradient(105deg, #39ff14, #66d9ef);
 }
 
 /* Theme: Catppuccin Latte (light) */

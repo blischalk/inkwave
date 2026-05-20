@@ -23,8 +23,14 @@ export function highlightCodeInContainer(container) {
   renderMermaidBlocks(container);
 }
 
-let _mermaidLoaded = false;
-let _mermaidLoading = false;
+const _LIGHT_THEMES = new Set(["paper", "sepia", "solarized-light", "lavender", "ctp-latte"]);
+
+export function resolveMermaidTheme() {
+  const theme = document.body.getAttribute("data-theme") || "";
+  return _LIGHT_THEMES.has(theme) ? "default" : "dark";
+}
+
+let _mermaidLoadPromise = null;
 
 async function loadMermaid() {
   try {
@@ -42,40 +48,41 @@ async function loadMermaid() {
   }
 }
 
+function ensureMermaid() {
+  if (!_mermaidLoadPromise) {
+    _mermaidLoadPromise = loadMermaid().catch((e) => {
+      _mermaidLoadPromise = null;
+      throw e;
+    });
+  }
+  return _mermaidLoadPromise;
+}
+
 async function renderMermaidBlocks(container) {
   const mermaidCodes = container.querySelectorAll('code.language-mermaid');
   log.debug("mermaid blocks found:", mermaidCodes.length);
   if (mermaidCodes.length === 0) return;
 
-  if (!_mermaidLoaded) {
-    if (_mermaidLoading) return;
-    _mermaidLoading = true;
-    log.debug("loading mermaid library…");
-    try {
-      const mm = await loadMermaid();
-      mm.initialize({ startOnLoad: false, theme: "dark" });
-      window.__mermaid = mm;
-      _mermaidLoaded = true;
-      log.debug("mermaid loaded");
-    } catch (e) {
-      log.error("mermaid load failed:", e);
-      _mermaidLoading = false;
-      return;
-    }
+  let mm;
+  try {
+    mm = await ensureMermaid();
+    log.debug("mermaid ready");
+  } catch (e) {
+    log.error("mermaid load failed:", e);
+    return;
   }
 
-  const mm = window.__mermaid;
   mermaidCodes.forEach((code) => {
     const pre = code.parentElement;
     if (!pre || pre.tagName !== "PRE") return;
     if (pre.dataset.mermaidRendered) return;
-    const text = code.textContent;
     pre.dataset.mermaidRendered = "1";
     pre.className = "mermaid";
-    pre.textContent = text;
+    pre.textContent = code.textContent;
   });
 
   try {
+    mm.initialize({ startOnLoad: false, theme: resolveMermaidTheme() });
     await mm.run({ nodes: container.querySelectorAll("pre.mermaid:not([data-processed])") });
     log.debug("mermaid.run complete");
   } catch (e) {

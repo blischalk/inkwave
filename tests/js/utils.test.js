@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { blockRaw, escapeHtml } from "../../js/utils.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { blockRaw, escapeHtml, resolveMermaidTheme } from "../../js/utils.js";
 
 // ── blockRaw ─────────────────────────────────────────────────────────────────
 
@@ -64,5 +64,62 @@ describe("escapeHtml", () => {
 
   it("escapes '&' in a longer string", () => {
     expect(escapeHtml("cats & dogs")).toBe("cats &amp; dogs");
+  });
+});
+
+// ── resolveMermaidTheme ───────────────────────────────────────────────────────
+
+describe("resolveMermaidTheme", () => {
+  afterEach(() => {
+    document.body.removeAttribute("data-theme");
+  });
+
+  it("returns 'dark' when no theme attribute is set", () => {
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for a dark theme", () => {
+    document.body.setAttribute("data-theme", "obsidianite");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for dracula", () => {
+    document.body.setAttribute("data-theme", "dracula");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for nord", () => {
+    document.body.setAttribute("data-theme", "nord");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'default' for paper (light)", () => {
+    document.body.setAttribute("data-theme", "paper");
+    expect(resolveMermaidTheme()).toBe("default");
+  });
+
+  it("returns 'default' for sepia (light)", () => {
+    document.body.setAttribute("data-theme", "sepia");
+    expect(resolveMermaidTheme()).toBe("default");
+  });
+
+  it("returns 'default' for solarized-light", () => {
+    document.body.setAttribute("data-theme", "solarized-light");
+    expect(resolveMermaidTheme()).toBe("default");
+  });
+
+  it("returns 'default' for lavender (light)", () => {
+    document.body.setAttribute("data-theme", "lavender");
+    expect(resolveMermaidTheme()).toBe("default");
+  });
+
+  it("returns 'default' for ctp-latte (light)", () => {
+    document.body.setAttribute("data-theme", "ctp-latte");
+    expect(resolveMermaidTheme()).toBe("default");
+  });
+
+  it("returns 'dark' for an unknown theme", () => {
+    document.body.setAttribute("data-theme", "some-future-theme");
+    expect(resolveMermaidTheme()).toBe("dark");
   });
 });

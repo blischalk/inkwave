@@ -165,6 +165,54 @@ document.addEventListener("copy", (e) => {
   }
 });
 
+// ── Right-click copy context menu ─────────────────────────────────────────────
+const _copyCtxMenu = (() => {
+  const el = document.createElement("div");
+  el.id = "copyContextMenu";
+  el.setAttribute("role", "menu");
+  const btn = document.createElement("button");
+  btn.id = "copyContextCopyBtn";
+  btn.setAttribute("role", "menuitem");
+  btn.textContent = "Copy";
+  el.appendChild(btn);
+  document.body.appendChild(el);
+  return el;
+})();
+
+function _hideCopyContextMenu() {
+  _copyCtxMenu.style.display = "none";
+}
+
+document.addEventListener("contextmenu", (e) => {
+  if (!e.target.closest(".content")) {
+    _hideCopyContextMenu();
+    return;
+  }
+  const sel = window.getSelection();
+  const text = sel ? sel.toString() : "";
+  if (!text) {
+    _hideCopyContextMenu();
+    return;
+  }
+  e.preventDefault();
+  const menuW = 120;
+  const menuH = 36;
+  const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
+  const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
+  _copyCtxMenu.style.left = x + "px";
+  _copyCtxMenu.style.top = y + "px";
+  _copyCtxMenu.style.display = "block";
+});
+
+document.getElementById("copyContextCopyBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const text = (window.getSelection() || {}).toString() || "";
+  if (text && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+  _hideCopyContextMenu();
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "a" || (!e.metaKey && !e.ctrlKey)) return;
   const activeEl = document.activeElement;
@@ -386,6 +434,7 @@ deleteFileBtn.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   openMenu.classList.remove("visible");
   treeContextMenu.classList.remove("visible");
+  if (!_copyCtxMenu.contains(e.target)) _hideCopyContextMenu();
   if (isPickerOpen() && themePickerWrap && !themePickerWrap.contains(e.target)) {
     closePicker(true);
   }
