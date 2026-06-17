@@ -361,29 +361,7 @@ export function showTabContent(tab, preferredBlocks) {
     applyDocFontSize();
     filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
 
-    // Intercept link clicks to handle #hash anchors and external URLs
-    contentEl.addEventListener("click", (e) => {
-      const a = e.target.closest("a[href]");
-      if (!a) return;
-      const href = a.getAttribute("href");
-      if (!href) return;
-      e.preventDefault();
-      if (href.startsWith("#")) {
-        const slug = href.slice(1).toLowerCase();
-        const headings = contentEl.querySelectorAll("h1,h2,h3,h4,h5,h6");
-        for (const h of headings) {
-          const hSlug = h.textContent.trim().toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, "")
-            .replace(/\s+/g, "-");
-          if (hSlug === slug) {
-            h.scrollIntoView({ behavior: "smooth", block: "start" });
-            break;
-          }
-        }
-      } else if (href.startsWith("http") || href.startsWith("//")) {
-        window.open(href, "_blank");
-      }
-    });
+
 
     // Wire double-click to start edit (single-click + drag can select text for copy)
     contentEl.querySelectorAll(".md-block").forEach((blockEl) => {
@@ -543,5 +521,34 @@ document.addEventListener(
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".md-image-wrap")) {
     document.querySelectorAll(".md-image-wrap.md-image-selected").forEach((w) => w.classList.remove("md-image-selected"));
+  }
+});
+
+// Registered once here rather than inside showTabContent to prevent duplicate
+// listeners accumulating across re-renders.
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[href]");
+  if (!a) return;
+  if (!a.closest(".content")) return;
+  const href = a.getAttribute("href");
+  if (!href) return;
+  e.preventDefault();
+  if (href.startsWith("#")) {
+    const container = a.closest(".content");
+    const slug = href.slice(1).toLowerCase();
+    for (const h of container.querySelectorAll("h1,h2,h3,h4,h5,h6")) {
+      const hSlug = h.textContent.trim().toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-");
+      if (hSlug === slug) { h.scrollIntoView({ behavior: "smooth", block: "start" }); break; }
+    }
+  } else if (href.startsWith("http") || href.startsWith("//")) {
+    const url = href.startsWith("//") ? "https:" + href : href;
+    const api = window.pywebview && window.pywebview.api;
+    if (api && typeof api.open_url === "function") {
+      api.open_url(url);
+    } else {
+      window.open(url, "_blank");
+    }
   }
 });

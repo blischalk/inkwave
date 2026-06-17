@@ -329,3 +329,49 @@ class TestGetWelcome:
         monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
         result = api.get_welcome()
         assert result is None
+
+
+# ── open_url ──────────────────────────────────────────────────────────────────
+
+class TestOpenUrl:
+    def test_opens_http_url(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url("http://example.com")
+        assert opened == ["http://example.com"]
+
+    def test_opens_https_url(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url("https://example.com/path?q=1")
+        assert opened == ["https://example.com/path?q=1"]
+
+    def test_rejects_non_http_scheme(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url("file:///etc/passwd")
+        assert opened == []
+
+    def test_rejects_javascript_scheme(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url("javascript:alert(1)")
+        assert opened == []
+
+    def test_rejects_empty_string(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url("")
+        assert opened == []
+
+    def test_rejects_none(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url(None)
+        assert opened == []
+
+    def test_rejects_non_string(self, api, monkeypatch):
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+        api.open_url(42)
+        assert opened == []

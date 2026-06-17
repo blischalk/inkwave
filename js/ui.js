@@ -14,7 +14,8 @@ import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
 import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tabs.js";
 import { initTree, openFile, selectFile, createInFolder, refreshFolder } from "./filetree.js";
-import { saveToFile, saveOrSaveAs, flushActiveEditAndSave } from "./fileio.js";
+import { saveToFile, saveOrSaveAs, flushActiveEditAndSave, undoTab, redoTab } from "./fileio.js";
+import { applyLinkToSelection } from "./editor.js";
 import { getBlocks, blocksToContent } from "./blocks.js";
 import { getBlockModeContentOffset } from "./vim.js";
 import { render } from "./renderer.js";
@@ -165,22 +166,69 @@ document.addEventListener("copy", (e) => {
   }
 });
 
-// ── Right-click copy context menu ─────────────────────────────────────────────
+// ── Right-click context menu (Copy + Link) ────────────────────────────────────
+let _ctxSelectedText = "";
+let _ctxBlockEl = null;
+
 const _copyCtxMenu = (() => {
   const el = document.createElement("div");
   el.id = "copyContextMenu";
   el.setAttribute("role", "menu");
-  const btn = document.createElement("button");
-  btn.id = "copyContextCopyBtn";
-  btn.setAttribute("role", "menuitem");
-  btn.textContent = "Copy";
-  el.appendChild(btn);
+
+  // Action buttons panel
+  const actions = document.createElement("div");
+  actions.className = "ctx-actions";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.id = "copyContextCopyBtn";
+  copyBtn.setAttribute("role", "menuitem");
+  copyBtn.textContent = "Copy";
+  actions.appendChild(copyBtn);
+
+  const linkBtn = document.createElement("button");
+  linkBtn.id = "copyContextLinkBtn";
+  linkBtn.setAttribute("role", "menuitem");
+  linkBtn.textContent = "Link…";
+  actions.appendChild(linkBtn);
+
+  el.appendChild(actions);
+
+  // URL input panel (shown after clicking Link…)
+  const form = document.createElement("div");
+  form.className = "ctx-link-form";
+  form.hidden = true;
+
+  const urlInput = document.createElement("input");
+  urlInput.id = "copyContextUrlInput";
+  urlInput.type = "text";
+  urlInput.placeholder = "https://";
+  urlInput.setAttribute("autocomplete", "off");
+  urlInput.setAttribute("spellcheck", "false");
+  form.appendChild(urlInput);
+
+  const row = document.createElement("div");
+  row.className = "ctx-link-row";
+
+  const applyBtn = document.createElement("button");
+  applyBtn.id = "copyContextLinkApplyBtn";
+  applyBtn.textContent = "Apply";
+  row.appendChild(applyBtn);
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.id = "copyContextLinkCancelBtn";
+  cancelBtn.textContent = "Cancel";
+  row.appendChild(cancelBtn);
+
+  form.appendChild(row);
+  el.appendChild(form);
   document.body.appendChild(el);
   return el;
 })();
 
 function _hideCopyContextMenu() {
   _copyCtxMenu.style.display = "none";
+  _copyCtxMenu.querySelector(".ctx-actions").hidden = false;
+  _copyCtxMenu.querySelector(".ctx-link-form").hidden = true;
 }
 
 document.addEventListener("contextmenu", (e) => {
@@ -195,8 +243,21 @@ document.addEventListener("contextmenu", (e) => {
     return;
   }
   e.preventDefault();
-  const menuW = 120;
-  const menuH = 36;
+  _ctxSelectedText = text;
+
+  // Resolve the block the selection lives in (needed for Link)
+  _ctxBlockEl = null;
+  if (sel.rangeCount > 0) {
+    const anchor = sel.getRangeAt(0).commonAncestorContainer;
+    const el = anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement;
+    if (el) _ctxBlockEl = el.closest(".md-block");
+  }
+
+  document.getElementById("copyContextLinkBtn").style.display = _ctxBlockEl ? "" : "none";
+
+  const hasLink = !!_ctxBlockEl;
+  const menuW = hasLink ? 140 : 120;
+  const menuH = hasLink ? 64 : 36;
   const x = Math.min(e.clientX, window.innerWidth - menuW - 8);
   const y = Math.min(e.clientY, window.innerHeight - menuH - 8);
   _copyCtxMenu.style.left = x + "px";
@@ -206,11 +267,47 @@ document.addEventListener("contextmenu", (e) => {
 
 document.getElementById("copyContextCopyBtn").addEventListener("click", (e) => {
   e.stopPropagation();
-  const text = (window.getSelection() || {}).toString() || "";
-  if (text && navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {});
+  if (_ctxSelectedText && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(_ctxSelectedText).catch(() => {});
   }
   _hideCopyContextMenu();
+});
+
+document.getElementById("copyContextLinkBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  _copyCtxMenu.querySelector(".ctx-actions").hidden = true;
+  _copyCtxMenu.querySelector(".ctx-link-form").hidden = false;
+  const input = document.getElementById("copyContextUrlInput");
+  input.value = "";
+  input.focus();
+});
+
+function _applyContextLink() {
+  const input = document.getElementById("copyContextUrlInput");
+  let url = input.value.trim();
+  if (!url) return;
+  if (!url.includes("://") && !url.startsWith("#") && !url.startsWith("mailto:")) {
+    url = "https://" + url;
+  }
+  if (_ctxBlockEl && _ctxSelectedText) {
+    applyLinkToSelection(_ctxSelectedText, url, _ctxBlockEl);
+  }
+  _hideCopyContextMenu();
+}
+
+document.getElementById("copyContextLinkApplyBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  _applyContextLink();
+});
+
+document.getElementById("copyContextLinkCancelBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  _hideCopyContextMenu();
+});
+
+document.getElementById("copyContextUrlInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.stopPropagation(); _applyContextLink(); }
+  if (e.key === "Escape") { e.stopPropagation(); _hideCopyContextMenu(); }
 });
 
 document.addEventListener("keydown", (e) => {
@@ -497,6 +594,31 @@ function changeFontSize(delta) {
   saveSettings(s);
 }
 
+// ── Undo / Redo ───────────────────────────────────────────────────────────────
+function applyUndo() {
+  const tab = getActiveTab();
+  if (tab && undoTab(tab)) {
+    setCurrentBlocks(getBlocks(tab.content || ""));
+    currentTabRef.content = tab.content;
+    saveToFile(tab);
+    if (onShowTabContent) onShowTabContent(tab);
+  }
+}
+
+function applyRedo() {
+  const tab = getActiveTab();
+  if (tab && redoTab(tab)) {
+    setCurrentBlocks(getBlocks(tab.content || ""));
+    currentTabRef.content = tab.content;
+    saveToFile(tab);
+    if (onShowTabContent) onShowTabContent(tab);
+  }
+}
+
+// Exposed so the native Edit menu (Python → evaluate_js) can call them.
+window.__undoEdit = applyUndo;
+window.__redoEdit = applyRedo;
+
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "p") { e.preventDefault(); window.print(); return; }
@@ -545,6 +667,22 @@ document.addEventListener("keydown", (e) => {
     if (tab) {
       e.preventDefault();
       saveOrSaveAs(tab);
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+    const activeEl = document.activeElement;
+    const inEditable = activeEl && (activeEl.isContentEditable || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "INPUT");
+    if (!inEditable) {
+      e.preventDefault();
+      e.shiftKey ? applyRedo() : applyUndo();
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+    const activeEl = document.activeElement;
+    const inEditable = activeEl && (activeEl.isContentEditable || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "INPUT");
+    if (!inEditable) {
+      e.preventDefault();
+      applyRedo();
     }
   }
   if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {

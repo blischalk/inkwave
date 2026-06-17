@@ -7,10 +7,15 @@ A reference file that exercises every major Markdown feature supported by Inkwav
 ## Headings
 
 # Heading 1
+
 ## Heading 2
-### Heading 3
+
+### Heading 3 ssdfgs
+
 #### Heading 4
+
 ##### Heading 5
+
 ###### Heading 6
 
 ---
@@ -55,6 +60,7 @@ senectus et netus et malesuada fames ac turpis egestas.
 
 - Apples
 - Oranges
+- Strawberries
 - Bananas
   - Cavendish
   - Plantain

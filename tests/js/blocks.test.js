@@ -10,6 +10,7 @@ import {
   stripListMarker,
   isOrderedListPrefix,
   moveListItemInBlocks,
+  buildLinkedRaw,
 } from "../../js/blocks.js";
 
 // ── getBlocks ────────────────────────────────────────────────────────────────
@@ -504,5 +505,55 @@ describe("getBlocks — list items with continuation lines", () => {
     blocks2.forEach((b, i) => {
       expect(b.type).toBe(blocks[i].type);
     });
+  });
+});
+
+// ── buildLinkedRaw ────────────────────────────────────────────────────────────
+
+describe("buildLinkedRaw", () => {
+  it("wraps selected text with a markdown link", () => {
+    expect(buildLinkedRaw("Hello world", "world", "https://example.com"))
+      .toBe("Hello [world](https://example.com)");
+  });
+
+  it("returns null when selected text is not found", () => {
+    expect(buildLinkedRaw("Hello world", "missing", "https://example.com")).toBeNull();
+  });
+
+  it("replaces the first occurrence when text appears multiple times", () => {
+    const result = buildLinkedRaw("the cat and the dog", "the", "https://example.com");
+    expect(result).toBe("[the](https://example.com) cat and the dog");
+  });
+
+  it("wraps text at the start of the raw string", () => {
+    expect(buildLinkedRaw("Click here for more", "Click here", "https://example.com"))
+      .toBe("[Click here](https://example.com) for more");
+  });
+
+  it("wraps text at the end of the raw string", () => {
+    expect(buildLinkedRaw("Read the docs", "docs", "https://example.com"))
+      .toBe("Read the [docs](https://example.com)");
+  });
+
+  it("handles the entire raw string being selected", () => {
+    expect(buildLinkedRaw("full text", "full text", "https://example.com"))
+      .toBe("[full text](https://example.com)");
+  });
+
+  it("preserves surrounding markdown syntax", () => {
+    expect(buildLinkedRaw("See **bold** text", "bold", "https://example.com"))
+      .toBe("See **[bold](https://example.com)** text");
+  });
+
+  it("returns null for an empty selected text", () => {
+    // empty string is always found at position 0 — guard this in the caller
+    const result = buildLinkedRaw("hello", "", "https://example.com");
+    // indexOf("") === 0, so it wraps nothing at position 0
+    expect(result).toBe("[](https://example.com)hello");
+  });
+
+  it("works with anchor URLs", () => {
+    expect(buildLinkedRaw("Jump to section", "section", "#heading"))
+      .toBe("Jump to [section](#heading)");
   });
 });

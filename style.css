@@ -387,6 +387,40 @@ body {
   cursor: pointer;
 }
 #copyContextMenu button:hover { background: var(--code-bg); }
+#copyContextMenu .ctx-link-form {
+  padding: 6px 8px 8px;
+  min-width: 220px;
+}
+#copyContextMenu #copyContextUrlInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+}
+#copyContextMenu #copyContextUrlInput:focus { border-color: var(--accent); }
+#copyContextMenu .ctx-link-row {
+  display: flex;
+  gap: 4px;
+}
+#copyContextMenu .ctx-link-row button {
+  flex: 1;
+  padding: 5px 4px;
+  font-size: 0.82rem;
+  border-radius: 4px;
+  text-align: center;
+}
+#copyContextMenu #copyContextLinkApplyBtn {
+  background: var(--accent);
+  color: var(--btn-text);
+}
+#copyContextMenu #copyContextLinkApplyBtn:hover { opacity: 0.88; }
 .show-sidebar-btn {
   display: none;
   position: fixed;

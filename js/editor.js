@@ -6,9 +6,9 @@ import {
   vimMode,
   getContentEl,
 } from "./state.js";
-import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks } from "./blocks.js";
+import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, buildLinkedRaw } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
-import { saveToFile } from "./fileio.js";
+import { saveToFile, pushUndo } from "./fileio.js";
 import { getActiveTab } from "./tabs.js";
 import { dbg, DEBUG_ENTER } from "./debug.js";
 import { getYank } from "./vim.js";
@@ -38,6 +38,7 @@ function executeListItemMove(direction, index, blocks, tab, contentEl) {
 //   - null/absent → cursor from click position
 export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorHint = null) {
   if (blockEl.classList.contains("editing")) return;
+  pushUndo(tab);
   const contentEl = blockEl.closest('.content') || document.querySelector('.content');
   clearSearch();
   const raw = blockRaw(blocks[index]);
@@ -899,6 +900,27 @@ document.addEventListener(
   },
   true,
 );
+
+/**
+ * Wrap the first occurrence of selectedText inside the block at blockEl with a
+ * Markdown link pointing to url. Saves and re-renders.
+ */
+export function applyLinkToSelection(selectedText, url, blockEl) {
+  const index = parseInt(blockEl.getAttribute("data-block-index"), 10);
+  if (isNaN(index) || index < 0 || index >= currentBlocks.length) return false;
+  const tab = currentTabRef;
+  if (!tab) return false;
+  const newRaw = buildLinkedRaw(blockRaw(currentBlocks[index]), selectedText, url);
+  if (newRaw === null) return false;
+  const blocks = currentBlocks.slice();
+  blocks[index] = { ...blocks[index], raw: newRaw };
+  tab.content = blocksToContent(blocks);
+  currentTabRef.content = tab.content;
+  setCurrentBlocks(blocks);
+  saveToFile(tab);
+  if (onShowTabContent) onShowTabContent(tab);
+  return true;
+}
 
 // Register callback so renderer.js can call startInlineEdit without a direct import.
 registerStartInlineEdit(startInlineEdit);

@@ -160,3 +160,17 @@ export function applyBlockTypeFromText(blockEl, text) {
     blockEl.classList.add("md-block-heading-" + info.depth);
   }
 }
+
+/**
+ * Return a new raw string with the first occurrence of selectedText wrapped in
+ * a Markdown link, or null if selectedText is not found in raw.
+ */
+export function buildLinkedRaw(raw, selectedText, url) {
+  const pos = raw.indexOf(selectedText);
+  if (pos < 0) return null;
+  return (
+    raw.slice(0, pos) +
+    "[" + selectedText + "](" + url + ")" +
+    raw.slice(pos + selectedText.length)
+  );
+}

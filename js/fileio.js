@@ -6,6 +6,38 @@ import { blocksToContent } from "./blocks.js";
 import { getTabTitle, renderTabBar } from "./tabs.js";
 import { showError } from "./utils.js";
 
+// ── Per-tab undo / redo ───────────────────────────────────────────────────────
+
+const MAX_UNDO = 50;
+
+export function pushUndo(tab) {
+  if (!tab) return;
+  if (!tab._undoStack) tab._undoStack = [];
+  if (!tab._redoStack) tab._redoStack = [];
+  const snapshot = tab.content != null ? String(tab.content) : "";
+  const top = tab._undoStack[tab._undoStack.length - 1];
+  if (top === snapshot) return;
+  tab._undoStack.push(snapshot);
+  if (tab._undoStack.length > MAX_UNDO) tab._undoStack.shift();
+  tab._redoStack = [];
+}
+
+export function undoTab(tab) {
+  if (!tab || !tab._undoStack || !tab._undoStack.length) return false;
+  if (!tab._redoStack) tab._redoStack = [];
+  tab._redoStack.push(tab.content != null ? String(tab.content) : "");
+  tab.content = tab._undoStack.pop();
+  return true;
+}
+
+export function redoTab(tab) {
+  if (!tab || !tab._redoStack || !tab._redoStack.length) return false;
+  if (!tab._undoStack) tab._undoStack = [];
+  tab._undoStack.push(tab.content != null ? String(tab.content) : "");
+  tab.content = tab._redoStack.pop();
+  return true;
+}
+
 export function saveToFile(tab) {
   if (!tab || !tab.path) return;
   const a = getApi();

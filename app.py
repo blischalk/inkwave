@@ -20,6 +20,98 @@ if os.name == "nt":
 import webview
 
 import logging
+
+# ── macOS native Edit-menu Undo/Redo ─────────────────────────────────────────
+# The class must be registered with the ObjC runtime before the event loop
+# starts, so it lives at module level.  The actual NSMenu manipulation is done
+# inside installMenuItems_ and dispatched via performSelectorOnMainThread so it
+# always runs on the AppKit main thread regardless of which thread fires the
+# pywebview loaded event.
+def _safe_eval(win, js):
+    """Call evaluate_js without raising."""
+    try:
+        win.evaluate_js(js)
+    except Exception:
+        pass
+
+_edit_menu_handler = None
+if sys.platform == "darwin":
+    try:
+        from AppKit import NSObject
+        import objc
+
+        class _EditMenuHandler(NSObject):
+            """ObjC target for the native Undo / Redo menu items."""
+
+            _win = None
+
+            @objc.python_method
+            def set_window(self, w):
+                _EditMenuHandler._win = w
+
+            def installMenuItems_(self, _):
+                """Installs Undo and Redo into the Edit menu. Always runs on the
+                main AppKit thread via performSelectorOnMainThread."""
+                try:
+                    from AppKit import NSApplication, NSMenuItem
+                    main_menu = NSApplication.sharedApplication().mainMenu()
+                    if main_menu is None:
+                        print("[inkwave] installMenuItems_: mainMenu() is None")
+                        return
+                    # Print all top-level menu titles so we can diagnose mismatches.
+                    titles = []
+                    for i in range(main_menu.numberOfItems()):
+                        sub = main_menu.itemAtIndex_(i).submenu()
+                        titles.append(sub.title() if sub else "?")
+                    print(f"[inkwave] menu bar: {titles}")
+                    edit_menu = None
+                    for i in range(main_menu.numberOfItems()):
+                        sub = main_menu.itemAtIndex_(i).submenu()
+                        if sub and sub.title() == "Edit":
+                            edit_menu = sub
+                            break
+                    if edit_menu is None:
+                        print("[inkwave] installMenuItems_: Edit submenu not found")
+                        return
+                    if edit_menu.itemWithTitle_("Undo") is not None:
+                        print("[inkwave] installMenuItems_: already installed")
+                        return
+                    undo_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        "Undo", "undoEdit:", "")
+                    undo_item.setTarget_(self)
+                    redo_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        "Redo", "redoEdit:", "")
+                    redo_item.setTarget_(self)
+                    edit_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), 0)
+                    edit_menu.insertItem_atIndex_(redo_item, 0)
+                    edit_menu.insertItem_atIndex_(undo_item, 0)
+                    print("[inkwave] Undo/Redo added to Edit menu")
+                except Exception as exc:
+                    print(f"[inkwave] installMenuItems_ error: {exc}")
+
+            def undoEdit_(self, sender):
+                # evaluate_js blocks waiting for WKWebView's completion
+                # handler, which also needs the main thread — deadlock if
+                # called directly from a menu action.  Run it on a thread.
+                w = _EditMenuHandler._win
+                if w:
+                    threading.Thread(
+                        target=lambda: _safe_eval(w, "if (window.__undoEdit) window.__undoEdit()"),
+                        daemon=True,
+                    ).start()
+
+            def redoEdit_(self, sender):
+                w = _EditMenuHandler._win
+                if w:
+                    threading.Thread(
+                        target=lambda: _safe_eval(w, "if (window.__redoEdit) window.__redoEdit()"),
+                        daemon=True,
+                    ).start()
+
+        _edit_menu_handler = _EditMenuHandler.new()
+        print("[inkwave] _EditMenuHandler created")
+    except Exception as _exc:
+        print(f"[inkwave] _EditMenuHandler init failed: {_exc}")
 from logging.handlers import RotatingFileHandler
 
 logger = logging.getLogger("inkwave")
@@ -475,6 +567,15 @@ class Api:
         except Exception:
             pass
 
+    def open_url(self, url):
+        """Open a URL in the system default browser. Only http/https URLs are accepted."""
+        import webbrowser
+        if not url or not isinstance(url, str):
+            return
+        if not url.startswith(("http://", "https://")):
+            return
+        webbrowser.open(url)
+
     def _settings_path(self):
         if getattr(sys, 'frozen', False):
             base = _user_data_dir()
@@ -865,10 +966,28 @@ def main():
         except Exception:
             pass
 
+    def inject_edit_menu():
+        """Schedule Undo/Redo installation on the AppKit main thread.
+
+        pywebview fires loaded callbacks on a background thread; NSMenu
+        mutations silently do nothing off the main thread.
+        performSelectorOnMainThread:withObject:waitUntilDone: queues the work
+        onto the main run loop from any thread safely.
+        """
+        if sys.platform != "darwin" or _edit_menu_handler is None:
+            print(f"[inkwave] inject_edit_menu: skipped "
+                  f"(platform={sys.platform}, handler={_edit_menu_handler})")
+            return
+        print("[inkwave] inject_edit_menu: dispatching installMenuItems_ to main thread")
+        _edit_menu_handler.set_window(window)
+        _edit_menu_handler.performSelectorOnMainThread_withObject_waitUntilDone_(
+            "installMenuItems:", None, False)
+
     try:
         window.events.loaded += inject_welcome
         window.events.loaded += inject_settings
         window.events.loaded += inject_open_file
+        window.events.loaded += inject_edit_menu
     except Exception:
         pass
 
@@ -910,6 +1029,7 @@ def main():
         logger.info("          Then the app should appear there; click 'Inspect' to open DevTools.")
     if os.name == "nt":
         start_kw["gui"] = "edgechromium"
+
     webview.start(**start_kw)
 
 
