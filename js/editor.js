@@ -7,7 +7,7 @@ import {
   getContentEl,
   markEditDismissed,
 } from "./state.js";
-import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, buildLinkedRaw } from "./blocks.js";
+import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, indentListItem, outdentListItem, buildLinkedRaw } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
 import { saveToFile, pushUndo } from "./fileio.js";
 import { getActiveTab } from "./tabs.js";
@@ -29,6 +29,23 @@ function executeListItemMove(direction, index, blocks, tab, contentEl) {
     setTimeout(() => {
       const movedEl = contentEl.querySelector('.md-block[data-block-index="' + newIndex + '"]');
       if (movedEl) startInlineEdit(movedEl, newIndex, currentBlocks, tab, null, true);
+    }, 0);
+  });
+}
+
+// Re-render after a depth change and resume editing the same item at the given caret offset.
+function reRenderAndResumeEdit(index, blocks, tab, contentEl, caretOffset) {
+  tab.content = blocksToContent(blocks);
+  currentTabRef.content = tab.content;
+  setCurrentBlocks(blocks);
+  saveToFile(tab);
+  setReplacingContent(true);
+  requestAnimationFrame(() => {
+    if (onShowTabContent) onShowTabContent(tab, blocks);
+    setReplacingContent(false);
+    setTimeout(() => {
+      const el = contentEl.querySelector('.md-block[data-block-index="' + index + '"]');
+      if (el) startInlineEdit(el, index, currentBlocks, tab, null, caretOffset);
     }, 0);
   });
 }
@@ -116,7 +133,9 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
     }
     const offsetInLi = cursorAtEndLi
       ? stripped.length
-      : Math.min(offsetInRenderedLi, stripped.length);
+      : explicitOffset != null
+        ? Math.min(explicitOffset, stripped.length)
+        : Math.min(offsetInRenderedLi, stripped.length);
 
     function getEditableText() {
       return (
@@ -165,6 +184,17 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         e.preventDefault();
         blocks[index].raw = getFullRaw();
         executeListItemMove(e.key === "ArrowUp" ? "up" : "down", index, blocks, tab, contentEl);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        blocks[index].raw = getFullRaw();
+        const caret = Math.min(getCaretOffset(editEl), getEditableText().length);
+        const changed = e.shiftKey
+          ? outdentListItem(blocks, index)
+          : indentListItem(blocks, index);
+        if (changed) reRenderAndResumeEdit(index, blocks, tab, contentEl, caret);
         return;
       }
       if (

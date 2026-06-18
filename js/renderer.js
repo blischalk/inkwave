@@ -489,6 +489,10 @@ export function showTabContent(tab, preferredBlocks) {
         delete tab.savedCursorContentOffset;
       } else if (vimMode) {
         initBlockNav();
+      } else if (isRerenderOfActiveTab) {
+        // Re-apply after layout settles; the synchronous restore can clamp short
+        // while a tall, deeply nested list is still being laid out.
+        contentEl.scrollTop = preservedScrollTop;
       }
     });
   } finally {

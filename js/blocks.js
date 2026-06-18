@@ -166,6 +166,54 @@ export function moveListItemInBlocks(blocks, index, direction) {
   return targetIndex;
 }
 
+/** Exclusive end index of the list item at index plus its deeper-depth descendants. */
+function listItemSubtreeEnd(blocks, index) {
+  const depth = blocks[index].listDepth || 0;
+  let end = index + 1;
+  while (
+    end < blocks.length &&
+    blocks[end] &&
+    blocks[end].type === "list" &&
+    (blocks[end].listDepth || 0) > depth
+  ) {
+    end++;
+  }
+  return end;
+}
+
+/** A list item can be indented only when the item directly above it is a list item at an equal or deeper level. */
+function isListItemIndentable(blocks, index) {
+  if (!blocks || index <= 0 || index >= blocks.length) return false;
+  const block = blocks[index];
+  const previous = blocks[index - 1];
+  if (!block || block.type !== "list") return false;
+  if (!previous || previous.type !== "list") return false;
+  return (block.listDepth || 0) <= (previous.listDepth || 0);
+}
+
+function shiftListItemSubtreeDepth(blocks, index, delta) {
+  const end = listItemSubtreeEnd(blocks, index);
+  for (let i = index; i < end; i++) {
+    blocks[i].listDepth = (blocks[i].listDepth || 0) + delta;
+  }
+}
+
+/** Indent a list item (and its descendants) one level. Returns true if it changed. */
+export function indentListItem(blocks, index) {
+  if (!isListItemIndentable(blocks, index)) return false;
+  shiftListItemSubtreeDepth(blocks, index, 1);
+  return true;
+}
+
+/** Outdent a list item (and its descendants) one level. Returns true if it changed. */
+export function outdentListItem(blocks, index) {
+  if (!blocks || index < 0 || index >= blocks.length) return false;
+  const block = blocks[index];
+  if (!block || block.type !== "list" || (block.listDepth || 0) <= 0) return false;
+  shiftListItemSubtreeDepth(blocks, index, -1);
+  return true;
+}
+
 export function applyBlockTypeFromText(blockEl, text) {
   if (!blockEl || !blockEl.classList) return;
   const info = getInlineBlockType(text);

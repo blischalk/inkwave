@@ -10,6 +10,8 @@ import {
   stripListMarker,
   isOrderedListPrefix,
   moveListItemInBlocks,
+  indentListItem,
+  outdentListItem,
   buildLinkedRaw,
 } from "../../js/blocks.js";
 
@@ -366,6 +368,84 @@ describe("getBlocks with nested lists", () => {
     expect(blocksToContent(blocks)).toBe(
       "- Parent\n  - Child\n    - Grand",
     );
+  });
+});
+
+// ── indentListItem / outdentListItem ─────────────────────────────────────────
+
+describe("indentListItem", () => {
+  it("indents an item under the list item directly above it", () => {
+    const blocks = [
+      { raw: "- a", type: "list", listDepth: 0 },
+      { raw: "- b", type: "list", listDepth: 0 },
+    ];
+    expect(indentListItem(blocks, 1)).toBe(true);
+    expect(blocks[1].listDepth).toBe(1);
+  });
+
+  it("carries the item's descendants along when indenting", () => {
+    const blocks = [
+      { raw: "- a", type: "list", listDepth: 0 },
+      { raw: "- b", type: "list", listDepth: 0 },
+      { raw: "- c", type: "list", listDepth: 1 },
+    ];
+    expect(indentListItem(blocks, 1)).toBe(true);
+    expect(blocks.map((b) => b.listDepth)).toEqual([0, 1, 2]);
+  });
+
+  it("refuses to indent the first item in a list", () => {
+    const blocks = [{ raw: "- a", type: "list", listDepth: 0 }];
+    expect(indentListItem(blocks, 0)).toBe(false);
+    expect(blocks[0].listDepth).toBe(0);
+  });
+
+  it("refuses to indent more than one level past the item above", () => {
+    const blocks = [
+      { raw: "- a", type: "list", listDepth: 0 },
+      { raw: "- b", type: "list", listDepth: 1 },
+    ];
+    expect(indentListItem(blocks, 1)).toBe(false);
+    expect(blocks[1].listDepth).toBe(1);
+  });
+
+  it("refuses to indent when the block above is not a list item", () => {
+    const blocks = [
+      { raw: "# H", type: "heading", depth: 1 },
+      { raw: "- a", type: "list", listDepth: 0 },
+    ];
+    expect(indentListItem(blocks, 1)).toBe(false);
+  });
+});
+
+describe("outdentListItem", () => {
+  it("outdents a child item one level", () => {
+    const blocks = [
+      { raw: "- a", type: "list", listDepth: 0 },
+      { raw: "- b", type: "list", listDepth: 1 },
+    ];
+    expect(outdentListItem(blocks, 1)).toBe(true);
+    expect(blocks[1].listDepth).toBe(0);
+  });
+
+  it("carries descendants along when outdenting", () => {
+    const blocks = [
+      { raw: "- a", type: "list", listDepth: 0 },
+      { raw: "- b", type: "list", listDepth: 1 },
+      { raw: "- c", type: "list", listDepth: 2 },
+    ];
+    expect(outdentListItem(blocks, 1)).toBe(true);
+    expect(blocks.map((b) => b.listDepth)).toEqual([0, 0, 1]);
+  });
+
+  it("refuses to outdent a top-level item", () => {
+    const blocks = [{ raw: "- a", type: "list", listDepth: 0 }];
+    expect(outdentListItem(blocks, 0)).toBe(false);
+    expect(blocks[0].listDepth).toBe(0);
+  });
+
+  it("returns false for a non-list block", () => {
+    const blocks = [{ raw: "para", type: "paragraph" }];
+    expect(outdentListItem(blocks, 0)).toBe(false);
   });
 });
 
