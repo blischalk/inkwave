@@ -23,6 +23,7 @@ import { launchDoom } from "./doom.js";
 import { applySplit, closeSplit } from "./panes.js";
 import { splitMode } from "./state.js";
 import { open as openSearch, close as closeSearch, isOpen as isSearchOpen } from "./search.js";
+import { exportPdf } from "./pdfexport.js";
 
 // ── Easter egg ────────────────────────────────────────────────────────────────
 const _logo = document.querySelector(".app-logo");
@@ -621,7 +622,7 @@ window.__redoEdit = applyRedo;
 
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === "p") { e.preventDefault(); window.print(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === "p") { e.preventDefault(); exportPdf(); return; }
   if (isPickerOpen()) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -856,10 +857,10 @@ document.addEventListener("drop", (e) => {
   }
 });
 
-// ── Print / Save as PDF ───────────────────────────────────────────────────────
+// ── Export to PDF ─────────────────────────────────────────────────────────────
 const printBtn = document.getElementById('printBtn');
 if (printBtn) {
-  printBtn.addEventListener('click', () => window.print());
+  printBtn.addEventListener('click', () => exportPdf());
 }
 
 

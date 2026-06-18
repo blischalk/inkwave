@@ -3,7 +3,19 @@ import os
 import sys
 import importlib.util
 
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+
 block_cipher = None
+
+# PDF export (pdf_export.py) pulls in pygments, reportlab and svglib. Pygments
+# loads lexers/styles by dynamic import, which PyInstaller's static analysis
+# cannot follow, and reportlab ships font data files — collect both explicitly.
+pdf_hiddenimports = (
+    collect_submodules('pygments.lexers')
+    + collect_submodules('pygments.styles')
+    + collect_submodules('pygments.formatters')
+)
+pdf_datas = collect_data_files('reportlab')
 
 # Icon paths (optional — build succeeds without them)
 icon_mac = 'icon.icns' if os.path.exists('icon.icns') else None
@@ -30,8 +42,9 @@ a = Analysis(
         ('vendor',     'vendor'),
         ('Welcome.md', '.'),
         ('./._/.definitely/.not.an.easter.egg', './._/.definitely/.not.an.easter.egg'),
-    ] + extra_datas,
-    hiddenimports=['webview', 'pygame', 'cydoomgeneric'],
+        ('pdf_export.py', '.'),
+    ] + extra_datas + pdf_datas,
+    hiddenimports=['webview', 'pygame', 'cydoomgeneric', 'pdf_export'] + pdf_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

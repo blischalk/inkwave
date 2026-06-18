@@ -2073,27 +2073,24 @@ body[data-theme="ctp-macchiato"] {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-/* Zero page margins so the background can fill edge-to-edge on every page.
-   Per-page visual spacing is handled by box-decoration-break: clone below. */
+/* PDF export is handled by the Python reportlab renderer (Api.export_pdf), which
+   gives correct per-page margins plus a full-bleed background. This block is only
+   a graceful fallback for any OS-level print: WebKit cannot paint the @page margin
+   band, so margins are kept at 0 and a full-bleed background covers the sheet. */
 @page { margin: 0; }
 
 @media print {
   * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
   html { height: auto; }
-  /* body gets the padding + clone so the margin repeats on every page fragment.
-     body is the true fragmenting root in paged media; its background propagates
-     to the canvas so the full page is always covered. */
   body {
     height: auto;
     overflow: visible;
-    padding: 0.75in 0.85in;
     box-sizing: border-box;
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
   }
 
-  /* position:fixed background repeats on every page; sits behind body content */
+  /* position:fixed background repeats on every page and, with @page margin 0,
+     covers the entire sheet — including the spacer bands. */
   body::before {
     content: '';
     position: fixed;
@@ -2116,7 +2113,7 @@ body[data-theme="ctp-macchiato"] {
   .content-area { height: auto; overflow: visible; display: block; }
   .pane-wrap { height: auto; overflow: visible; display: block; }
   .pane.pane-primary { height: auto; overflow: visible; display: block; }
-  #content-primary { height: auto; overflow: visible; padding: 0; box-sizing: border-box; }
+  #content-primary { height: auto; overflow: visible; padding: 0.75in 0.85in; box-sizing: border-box; }
   .pane.active-pane { box-shadow: none !important; }
 
   /* Disable gradient text — background-clip:text renders blurry in PDF */

@@ -59,6 +59,12 @@ There are no tests and no linting configuration.
 - `delete_file(path)` — returns `{success}`
 - `get_welcome()` — returns bundled `Welcome.md` content
 - `toggle_fullscreen()` — toggles native window fullscreen
+- `export_pdf(payload)` — renders Markdown to a themed PDF via `pdf_export.py` and a Save dialog; returns `{path}`, `{cancelled}`, or `{error}`
+- `open_path(path)` — opens a local file in the OS default app (used to reveal an exported PDF; no shell execution)
+
+### PDF export (`pdf_export.py`)
+
+PDF export does **not** use the webview's `window.print()`: WebKit's print engine cannot paint the `@page` margin band, so a full-bleed background with per-page margins is impossible there. Instead `pdf_export.py` re-renders the Markdown with **reportlab** (pure Python — bundles cleanly into the packaged app with no system libraries, unlike WeasyPrint's native pango/cairo stack). It draws the page background on every page and flows content within native margins. `js/pdfexport.js` gathers the active document's Markdown, the resolved theme colours, and **PNG rasterisations of the rendered mermaid diagrams** (each on-screen `pre.mermaid svg` is drawn to a canvas and exported as PNG), then calls `export_pdf`. Code highlighting is via Pygments. Mermaid is embedded as a browser-rasterised PNG (not svglib, which mis-positions mermaid's anchored text); mermaid is configured with `htmlLabels:false` in `js/utils.js` so labels are SVG `<text>` that rasterise cleanly. Local SVG *image files* (`![](x.svg)`) still use svglib via `svg2rlg`.
 
 ### Frontend (`js/`)
 
@@ -85,6 +91,7 @@ All theming uses CSS custom properties (`--bg`, `--text`, `--accent`, `--toolbar
 | File | Purpose |
 |------|---------|
 | `app.py` | Python entry point; pywebview window creation; `Api` class for all file I/O |
+| `pdf_export.py` | Markdown→PDF renderer (reportlab); used by `Api.export_pdf` |
 | `index.html` | App shell; loads CDN scripts (marked.js, highlight.js) and `js/main.js` |
 | `js/main.js` | Entry point; imports state, api, blocks, tabs, fileio, renderer, editor, filetree, ui, init |
 | `style.css` | All styles and theme definitions via CSS custom properties |

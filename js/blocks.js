@@ -2,6 +2,25 @@ import { escapeHtml, blockRaw } from "./utils.js";
 
 export { blockRaw };
 
+/**
+ * Flatten a marked list token's items into one block per item, at every nesting
+ * level, so each item (including children of a sublist) is an independently
+ * editable block. Each block carries its `listDepth` (0 = top level); the raw is
+ * normalised to column zero and re-indented during serialisation.
+ */
+function flattenListItems(items, depth, out) {
+  for (const item of items) {
+    const nestedLists = (item.tokens || []).filter((t) => t.type === "list");
+    const ownRaw = nestedLists.length
+      ? (item.raw || "").split("\n")[0].replace(/[\s]+$/, "")
+      : (item.raw || "").replace(/[\s]+$/, "");
+    if (ownRaw) out.push({ raw: ownRaw, type: "list", listDepth: depth });
+    for (const nested of nestedLists) {
+      flattenListItems(nested.items || [], depth + 1, out);
+    }
+  }
+}
+
 export function getBlocks(content) {
   if (!content || String(content).trim() === "") return [];
   try {
@@ -18,10 +37,7 @@ export function getBlocks(content) {
               : String(t.raw)
             : "";
         if (t.type === "list") {
-          for (const item of t.items || []) {
-            const r = (item.raw || "").replace(/[\s]+$/, "");
-            if (r) out.push({ raw: r, type: "list" });
-          }
+          flattenListItems(t.items || [], 0, out);
           continue;
         }
         out.push({ raw: raw, type: t.type || "paragraph", depth: t.depth });
@@ -33,16 +49,27 @@ export function getBlocks(content) {
   return parts.map((raw) => ({ raw: raw, type: "paragraph" }));
 }
 
+/** A block's raw, trimmed of trailing whitespace and re-indented by its list depth. */
+function cleanBlockRaw(b) {
+  const raw = blockRaw(b).replace(/[\s]+$/, "");
+  const depth = (typeof b === "object" && b.listDepth) || 0;
+  if (depth <= 0) return raw;
+  const indent = "  ".repeat(depth);
+  return raw
+    .split("\n")
+    .map((line) => indent + line)
+    .join("\n");
+}
+
 export function blocksToContent(blocks) {
   if (blocks.length === 0) return "";
-  function cleanRaw(b) { return blockRaw(b).replace(/[\s]+$/, ""); }
-  let result = cleanRaw(blocks[0]);
+  let result = cleanBlockRaw(blocks[0]);
   for (let i = 1; i < blocks.length; i++) {
     const prevType = typeof blocks[i - 1] === "object" ? blocks[i - 1].type : "paragraph";
     const curType  = typeof blocks[i]     === "object" ? blocks[i].type     : "paragraph";
     // Consecutive list items use a single newline (tight list, no blank lines between items).
     const sep = (prevType === "list" && curType === "list") ? "\n" : "\n\n";
-    result += sep + cleanRaw(blocks[i]);
+    result += sep + cleanBlockRaw(blocks[i]);
   }
   return result;
 }
@@ -50,11 +77,10 @@ export function blocksToContent(blocks) {
 /** Offsets of each block in the content string (from blocksToContent). [{ start, end }, ...] */
 export function getBlockOffsets(blocks) {
   if (blocks.length === 0) return [];
-  function cleanRaw(b) { return blockRaw(b).replace(/[\s]+$/, ""); }
   const out = [];
   let pos = 0;
   for (let i = 0; i < blocks.length; i++) {
-    const raw = cleanRaw(blocks[i]);
+    const raw = cleanBlockRaw(blocks[i]);
     out.push({ start: pos, end: pos + raw.length });
     pos += raw.length;
     if (i < blocks.length - 1) {

@@ -375,3 +375,97 @@ class TestOpenUrl:
         monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
         api.open_url(42)
         assert opened == []
+
+
+# ── export_pdf ───────────────────────────────────────────────────────────────
+
+class TestExportPdf:
+    def _payload(self, **overrides):
+        payload = {
+            "markdown": "# Title\n\nBody text.",
+            "theme": {"bg": "#100e17", "text": "#bebebe"},
+            "mermaidImages": [],
+            "suggestedName": "Notes.md",
+            "sourcePath": None,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_writes_pdf_to_chosen_path(self, api, tmp_path):
+        out = str(tmp_path / "Notes.pdf")
+        api._window.create_file_dialog.return_value = out
+        result = api.export_pdf(self._payload())
+        assert result.get("path") == out
+        assert os.path.isfile(out)
+        with open(out, "rb") as f:
+            assert f.read(5) == b"%PDF-"
+
+    def test_suggests_pdf_filename(self, api, tmp_path):
+        api._window.create_file_dialog.return_value = str(tmp_path / "Notes.pdf")
+        api.export_pdf(self._payload(suggestedName="Notes.md"))
+        kwargs = api._window.create_file_dialog.call_args.kwargs
+        assert kwargs["save_filename"] == "Notes.pdf"
+
+    def test_appends_pdf_extension_when_missing(self, api, tmp_path):
+        api._window.create_file_dialog.return_value = str(tmp_path / "out")
+        result = api.export_pdf(self._payload())
+        assert result["path"].endswith(".pdf")
+
+    def test_cancelled_when_dialog_dismissed(self, api):
+        api._window.create_file_dialog.return_value = None
+        result = api.export_pdf(self._payload())
+        assert result == {"cancelled": True}
+
+    def test_rejects_non_dict_payload(self, api):
+        assert "error" in api.export_pdf("nope")
+
+    def test_rejects_missing_markdown(self, api):
+        assert "error" in api.export_pdf(self._payload(markdown=None))
+
+    def test_dialog_error_is_reported(self, api):
+        api._window.create_file_dialog.side_effect = RuntimeError("boom")
+        result = api.export_pdf(self._payload())
+        assert result["error"] == "boom"
+
+    def test_build_failure_is_reported(self, api, tmp_path, monkeypatch):
+        api._window.create_file_dialog.return_value = str(tmp_path / "x.pdf")
+        monkeypatch.setattr("pdf_export.build_pdf",
+                            lambda *a, **k: (_ for _ in ()).throw(ValueError("render fail")))
+        result = api.export_pdf(self._payload())
+        assert result["error"] == "render fail"
+
+    def test_resolves_base_dir_from_source_path(self, api, tmp_path):
+        svg = tmp_path / "pic.svg"
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                       '<rect width="10" height="10" fill="#0fb6d6"/></svg>')
+        md_path = str(tmp_path / "doc.md")
+        out = str(tmp_path / "doc.pdf")
+        api._window.create_file_dialog.return_value = out
+        result = api.export_pdf(self._payload(markdown="![p](pic.svg)", sourcePath=md_path))
+        assert os.path.isfile(result["path"])
+
+
+# ── open_path ────────────────────────────────────────────────────────────────
+
+class TestOpenPath:
+    def test_missing_file_returns_error(self, api):
+        assert "error" in api.open_path("/no/such/file.pdf")
+
+    def test_non_string_returns_error(self, api):
+        assert "error" in api.open_path(None)
+
+    def test_opens_existing_file(self, api, tmp_path, monkeypatch):
+        pdf = tmp_path / "out.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        opened = []
+        if app.sys.platform == "darwin":
+            ws = MagicMock()
+            ws.sharedWorkspace.return_value.openFile_ = lambda p: opened.append(p)
+            monkeypatch.setitem(__import__("sys").modules, "AppKit", MagicMock(NSWorkspace=ws))
+        elif os.name == "nt":
+            monkeypatch.setattr(os, "startfile", lambda p: opened.append(p), raising=False)
+        else:
+            monkeypatch.setattr("webbrowser.open", lambda p: opened.append(p))
+        result = api.open_path(str(pdf))
+        assert result.get("success") is True
+        assert opened and str(pdf) in opened[0]

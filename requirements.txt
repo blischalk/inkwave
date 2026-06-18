@@ -12,3 +12,9 @@ openai>=1.0.0
 google-genai>=1.0.0
 pygame>=2.0.0
 cydoomgeneric>=0.1.0
+# PDF export (pure-Python; bundles cleanly with PyInstaller, no system libraries)
+reportlab>=4.0,<5.0
+markdown-it-py>=3.0,<5.0
+mdit-py-plugins>=0.4,<1.0
+Pygments>=2.0,<3.0
+svglib>=1.5,<3.0

@@ -82,7 +82,14 @@ async function renderMermaidBlocks(container) {
   });
 
   try {
-    mm.initialize({ startOnLoad: false, theme: resolveMermaidTheme() });
+    // htmlLabels:false renders labels as SVG <text> (not HTML in <foreignObject>)
+    // so the diagrams survive PDF export, where the SVG is rasterised by svglib.
+    mm.initialize({
+      startOnLoad: false,
+      theme: resolveMermaidTheme(),
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+    });
     await mm.run({ nodes: container.querySelectorAll("pre.mermaid:not([data-processed])") });
     log.debug("mermaid.run complete");
   } catch (e) {

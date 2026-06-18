@@ -5,6 +5,7 @@ import {
   registerShowTabContent, registerShowWelcomeOrEmpty,
   onStartInlineEdit,
   getContentEl,
+  lastEditDismissAt,
 } from "./state.js";
 import { initBlockNav, clearBlockNav, applyVimMode, placeVimCursorAtContentOffset, scrollRawCursorIntoView } from "./vim.js";
 import { escapeHtml, highlightCodeInContainer } from "./utils.js";
@@ -214,10 +215,71 @@ function wireImageResize(container, tab, blocks) {
   });
 }
 
+function listBlockType(b) {
+  return typeof b === "string" ? "paragraph" : b.type || "paragraph";
+}
+
+/**
+ * Build nested <ul>/<ol> HTML from the run of consecutive list blocks starting
+ * at startIndex, using each block's listDepth to open and close sublists. A
+ * nested list lives inside its parent item's still-open <li>. Returns the HTML
+ * and the index of the first block after the list run.
+ */
+function buildNestedListHtml(blocks, startIndex, footnoteDefs) {
+  let html = "";
+  const tagStack = [];
+  let curDepth = -1;
+  let i = startIndex;
+  while (i < blocks.length && listBlockType(blocks[i]) === "list") {
+    const lb = blocks[i];
+    const lraw = blockRaw(lb);
+    const depth = (typeof lb === "object" && lb.listDepth) || 0;
+    const tag = isOrderedListPrefix(getListPrefix(lraw)) ? "ol" : "ul";
+    if (depth > curDepth) {
+      for (let k = curDepth + 1; k <= depth; k++) {
+        html += "<" + tag + ' class="md-list-container">';
+        tagStack.push(tag);
+      }
+    } else {
+      html += "</li>";
+      for (let k = curDepth; k > depth; k--) {
+        html += "</" + tagStack.pop() + ">";
+        html += "</li>";
+      }
+      // A sibling list of a different marker type starts a fresh list here.
+      if (tagStack[tagStack.length - 1] !== tag) {
+        html += "</" + tagStack.pop() + ">";
+        html += "<" + tag + ' class="md-list-container">';
+        tagStack.push(tag);
+      }
+    }
+    curDepth = depth;
+    html +=
+      '<li class="md-block md-block-list" data-block-index="' +
+      i +
+      '">' +
+      getListItemDisplayHtml(applyFootnoteRefs(lraw, footnoteDefs));
+    i++;
+  }
+  if (curDepth >= 0) {
+    html += "</li>";
+    for (let k = curDepth; k > 0; k--) {
+      html += "</" + tagStack.pop() + ">";
+      html += "</li>";
+    }
+    html += "</" + tagStack.pop() + ">";
+  }
+  return { html, nextIndex: i };
+}
+
 export function showTabContent(tab, preferredBlocks) {
   if (!tab) return;
   const contentEl = getContentEl();
   if (!contentEl) return;
+  // Re-rendering replaces innerHTML, which resets scrollTop; preserve it when
+  // re-rendering the tab already on screen so committing an edit doesn't jump.
+  const isRerenderOfActiveTab = currentTabRef === tab;
+  const preservedScrollTop = isRerenderOfActiveTab ? contentEl.scrollTop : 0;
   setReplacingContent(true);
   try {
     // ── Raw mode: show the full file as an editable textarea ─────────────────
@@ -309,28 +371,13 @@ export function showTabContent(tab, preferredBlocks) {
         const raw = blockRaw(b);
         const type = typeof b === "string" ? "paragraph" : b.type || "paragraph";
         if (type === "list") {
-          const prefix = getListPrefix(raw);
-          const listTag = isOrderedListPrefix(prefix) ? "ol" : "ul";
-          let listHtml = "<" + listTag + ' class="md-list-container">';
-          while (i < blocks.length) {
-            const lb = blocks[i];
-            const lraw = blockRaw(lb);
-            const ltype =
-              typeof lb === "string" ? "paragraph" : lb.type || "paragraph";
-            if (ltype !== "list") break;
-            const lprefix = getListPrefix(lraw);
-            if (isOrderedListPrefix(lprefix) !== isOrderedListPrefix(prefix))
-              break;
-            listHtml +=
-              '<li class="md-block md-block-list" data-block-index="' +
-              i +
-              '">' +
-              getListItemDisplayHtml(applyFootnoteRefs(lraw, footnoteDefs)) +
-              "</li>";
-            i++;
-          }
-          listHtml += "</" + listTag + ">";
+          const { html: listHtml, nextIndex } = buildNestedListHtml(
+            blocks,
+            i,
+            footnoteDefs,
+          );
           html += listHtml;
+          i = nextIndex;
           continue;
         }
         const depth = typeof b === "object" && b.depth;
@@ -360,6 +407,7 @@ export function showTabContent(tab, preferredBlocks) {
     }
     applyDocFontSize();
     filenameEl.textContent = tab.path ? getTabTitle(tab.path) : tab.title || "";
+    if (isRerenderOfActiveTab) contentEl.scrollTop = preservedScrollTop;
 
 
 
@@ -369,6 +417,9 @@ export function showTabContent(tab, preferredBlocks) {
         if (!dblClickEdit || isSearchOpen()) return;
         if (e.target.classList && e.target.classList.contains("inline-edit"))
           return;
+        // Nested list items are .md-block inside .md-block; only the innermost
+        // (the one actually clicked) should start editing, not its ancestors.
+        if (e.target.closest(".md-block") !== blockEl) return;
         const idx = parseInt(blockEl.getAttribute("data-block-index"), 10);
         if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
         if (onStartInlineEdit) onStartInlineEdit(blockEl, idx, currentBlocks, tab, e);
@@ -393,6 +444,8 @@ export function showTabContent(tab, preferredBlocks) {
     contentEl.onclick = (e) => {
       if (e.target.closest(".md-block")) return;
       if (e.target.closest(".md-list-container")) return;
+      // A click that just dismissed an inline edit shouldn't also append a block.
+      if (Date.now() - lastEditDismissAt < 300) return;
       const _sel = window.getSelection();
       if (_sel && _sel.toString().length > 0) return;
       if (!currentTabRef || !currentBlocks) return;

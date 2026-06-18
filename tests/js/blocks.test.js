@@ -321,6 +321,54 @@ describe("stripListMarker", () => {
   });
 });
 
+// ── nested list flattening ───────────────────────────────────────────────────
+
+describe("getBlocks with nested lists", () => {
+  it("flattens each nested item into its own block with a listDepth", () => {
+    const blocks = getBlocks("- Parent\n  - Child 1\n  - Child 2\n- Sibling");
+    expect(blocks).toEqual([
+      { raw: "- Parent", type: "list", listDepth: 0 },
+      { raw: "- Child 1", type: "list", listDepth: 1 },
+      { raw: "- Child 2", type: "list", listDepth: 1 },
+      { raw: "- Sibling", type: "list", listDepth: 0 },
+    ]);
+  });
+
+  it("normalises each item's raw to column zero regardless of depth", () => {
+    const blocks = getBlocks("- Parent\n  - Child\n    - Grandchild");
+    expect(blocks.map((b) => b.raw)).toEqual([
+      "- Parent",
+      "- Child",
+      "- Grandchild",
+    ]);
+    expect(blocks.map((b) => b.listDepth)).toEqual([0, 1, 2]);
+  });
+
+  it("keeps flat lists at depth 0", () => {
+    const blocks = getBlocks("- a\n- b");
+    expect(blocks.map((b) => b.listDepth)).toEqual([0, 0]);
+  });
+
+  it("round-trips a nested list through blocksToContent and back", () => {
+    const md = "- Parent\n  - Child 1\n  - Child 2\n    - Grand\n- Sibling";
+    const blocks = getBlocks(md);
+    const serialized = blocksToContent(blocks);
+    expect(serialized).toBe(md);
+    expect(getBlocks(serialized)).toEqual(blocks);
+  });
+
+  it("re-indents nested items by two spaces per depth level", () => {
+    const blocks = [
+      { raw: "- Parent", type: "list", listDepth: 0 },
+      { raw: "- Child", type: "list", listDepth: 1 },
+      { raw: "- Grand", type: "list", listDepth: 2 },
+    ];
+    expect(blocksToContent(blocks)).toBe(
+      "- Parent\n  - Child\n    - Grand",
+    );
+  });
+});
+
 // ── moveListItemInBlocks ─────────────────────────────────────────────────────
 
 describe("moveListItemInBlocks", () => {

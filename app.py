@@ -576,6 +576,76 @@ class Api:
             return
         webbrowser.open(url)
 
+    def export_pdf(self, payload):
+        """Render Markdown to a themed PDF via a Save dialog.
+
+        payload = { markdown, theme, mermaidSvgs, suggestedName, sourcePath }.
+        Returns { path } on success, { cancelled: True } if the dialog was
+        dismissed, or { error } on failure.
+        """
+        if not isinstance(payload, dict):
+            return {"error": "Invalid export request."}
+        markdown = payload.get("markdown")
+        if not isinstance(markdown, str):
+            return {"error": "No content to export."}
+        theme = payload.get("theme") if isinstance(payload.get("theme"), dict) else {}
+        raw_images = payload.get("mermaidImages")
+        mermaid_images = (
+            [x for x in raw_images if isinstance(x, dict) and isinstance(x.get("data"), str)]
+            if isinstance(raw_images, list) else []
+        )
+        suggested = payload.get("suggestedName")
+        suggested = suggested if isinstance(suggested, str) and suggested else "Untitled.pdf"
+        suggested = os.path.splitext(os.path.basename(suggested))[0] + ".pdf"
+        source_path = payload.get("sourcePath")
+        base_dir = (
+            os.path.dirname(source_path)
+            if isinstance(source_path, str) and os.path.isabs(source_path)
+            else None
+        )
+        try:
+            result = self._window.create_file_dialog(
+                _FILE_DIALOG_SAVE,
+                save_filename=suggested,
+                file_types=("PDF files (*.pdf)", "All files (*.*)"),
+            )
+        except Exception as e:
+            return {"error": str(e)}
+        out_path = result if isinstance(result, str) else (result[0] if result else None)
+        if not out_path:
+            return {"cancelled": True}
+        if not out_path.lower().endswith(".pdf"):
+            out_path = out_path.rstrip(".") + ".pdf"
+        try:
+            import pdf_export
+            pdf_export.build_pdf(
+                markdown, theme, out_path, base_dir=base_dir, mermaid_images=mermaid_images
+            )
+        except Exception as e:
+            logger.exception("export_pdf failed")
+            return {"error": str(e)}
+        return {"path": out_path}
+
+    def open_path(self, path):
+        """Open a local file in the OS default application (no shell execution).
+
+        Used to reveal an exported PDF. Validates the path exists before opening.
+        """
+        if not isinstance(path, str) or not os.path.isfile(path):
+            return {"error": "File not found."}
+        try:
+            if sys.platform == "darwin":
+                from AppKit import NSWorkspace
+                NSWorkspace.sharedWorkspace().openFile_(path)
+            elif os.name == "nt":
+                os.startfile(path)  # noqa: not shell execution
+            else:
+                import webbrowser
+                webbrowser.open("file://" + path)
+            return {"success": True}
+        except Exception as e:
+            return {"error": str(e)}
+
     def _settings_path(self):
         if getattr(sys, 'frozen', False):
             base = _user_data_dir()

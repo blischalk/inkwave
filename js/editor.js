@@ -5,6 +5,7 @@ import {
   registerStartInlineEdit,
   vimMode,
   getContentEl,
+  markEditDismissed,
 } from "./state.js";
 import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, buildLinkedRaw } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
@@ -61,6 +62,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
   if (isListItemInPlace) {
     const listPrefix = getListPrefix(raw);
     const stripped = stripListMarker(raw);
+    const listDepth = blocks[index].listDepth || 0;
     let offsetInRenderedLi = 0;
     if (clickEvent) {
       let range = null;
@@ -87,18 +89,38 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
     }
     const cursorAtEndLi = cursorHint === true;
     blockEl.classList.add("editing");
-    blockEl.contentEditable = "true";
-    blockEl.textContent = stripped;
-    if (!blockEl.firstChild) blockEl.appendChild(document.createTextNode(""));
+    // A list item that has children renders its descendant sublist(s) inside its
+    // own <li>. Edit only this item's own text in an inner element so those
+    // descendants stay rendered in place instead of being wiped while editing.
+    const descendantLists = Array.from(
+      blockEl.querySelectorAll(":scope > ul, :scope > ol"),
+    );
+    let editEl;
+    if (descendantLists.length) {
+      blockEl.textContent = "";
+      editEl = document.createElement("span");
+      editEl.className = "inline-edit inline-edit-li";
+      editEl.contentEditable = "true";
+      editEl.textContent = stripped;
+      if (!editEl.firstChild) editEl.appendChild(document.createTextNode(""));
+      blockEl.appendChild(editEl);
+      for (const node of descendantLists) {
+        node.contentEditable = "false";
+        blockEl.appendChild(node);
+      }
+    } else {
+      editEl = blockEl;
+      blockEl.contentEditable = "true";
+      blockEl.textContent = stripped;
+      if (!blockEl.firstChild) blockEl.appendChild(document.createTextNode(""));
+    }
     const offsetInLi = cursorAtEndLi
       ? stripped.length
       : Math.min(offsetInRenderedLi, stripped.length);
 
     function getEditableText() {
       return (
-        blockEl.innerText != null
-          ? blockEl.innerText
-          : blockEl.textContent || ""
+        editEl.innerText != null ? editEl.innerText : editEl.textContent || ""
       ).replace(/\u00a0/g, " ");
     }
     function getFullRaw() {
@@ -120,20 +142,23 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
       if (!_replacingContent && onShowTabContent) onShowTabContent(tab);
     }
 
-    blockEl.addEventListener("input", syncContentAndAutosave);
-    blockEl.addEventListener("blur", function onBlur() {
-      blockEl.removeEventListener("blur", onBlur);
-      blockEl.removeEventListener("input", syncContentAndAutosave);
-      blockEl.contentEditable = "false";
+    editEl.addEventListener("input", syncContentAndAutosave);
+    editEl.addEventListener("blur", function onBlur() {
+      editEl.removeEventListener("blur", onBlur);
+      editEl.removeEventListener("input", syncContentAndAutosave);
+      editEl.contentEditable = "false";
       blockEl.classList.remove("editing");
+      delete editEl._vimSync;
       delete blockEl._vimSync;
+      markEditDismissed();
       commit();
     });
+    editEl._vimSync = syncContentAndAutosave;
     blockEl._vimSync = syncContentAndAutosave;
     const onListKeydown = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        blockEl.blur();
+        editEl.blur();
         return;
       }
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.metaKey && e.shiftKey) {
@@ -175,7 +200,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         const text = getEditableText();
         const offset = Math.max(
           0,
-          Math.min(getCaretOffset(blockEl), text.length),
+          Math.min(getCaretOffset(editEl), text.length),
         );
         const beforeCursor = text.slice(0, offset);
         const afterCursor = text.slice(offset);
@@ -248,6 +273,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         blocks.splice(index + 1, 0, {
           raw: listPrefix + afterCursor,
           type: "list",
+          listDepth: listDepth,
         });
         tab.content = blocksToContent(blocks);
         currentTabRef.content = tab.content;
@@ -275,11 +301,11 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         return;
       }
     };
-    blockEl.addEventListener("keydown", onListKeydown, true);
+    editEl.addEventListener("keydown", onListKeydown, true);
 
-    blockEl.focus();
+    editEl.focus();
     setTimeout(() => {
-      setCaretPosition(blockEl, offsetInLi);
+      setCaretPosition(editEl, offsetInLi);
     }, 0);
     return;
   }
@@ -416,6 +442,7 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
     editable.removeEventListener("blur", onBlur);
     delete editable._vimSync;
     delete blockEl._vimSync;
+    markEditDismissed();
     commit();
   });
   editable._vimSync = syncContentAndAutosave;

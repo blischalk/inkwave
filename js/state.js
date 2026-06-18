@@ -70,6 +70,11 @@ export function getContentEl() {
 export let dblClickEdit = true;
 export function setDblClickEdit(v) { dblClickEdit = v; }
 
+// Timestamp of the most recent inline-edit dismissal, used so the click that
+// blurred an editor isn't also treated as an empty-space click to add a block.
+export let lastEditDismissAt = 0;
+export function markEditDismissed() { lastEditDismissAt = Date.now(); }
+
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 export const contentEl       = document.getElementById("content-primary");
 export const filenameEl      = document.getElementById("filename");
