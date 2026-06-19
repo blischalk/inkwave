@@ -61,6 +61,12 @@ senectus et netus et malesuada fames ac turpis egestas.
 - Apples
 - Oranges
 - Strawberries
+
+```ruby  
+def foobar:
+  return "baz" 
+```
+
 - Bananas
   - Cavendish
   - Plantain

@@ -421,23 +421,25 @@ body {
   color: var(--btn-text);
 }
 #copyContextMenu #copyContextLinkApplyBtn:hover { opacity: 0.88; }
+/* When the sidebar is collapsed this becomes a thin full-height rail that is part
+   of the flex layout (not a floating overlay), so document content always flows
+   beside it and can never be overlapped — even at narrow window widths. */
 .show-sidebar-btn {
   display: none;
-  position: fixed;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  padding: 8px 6px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
   background: var(--toolbar-bg);
-  border: 1px solid var(--border);
-  border-radius: 0 6px 6px 0;
+  border: none;
+  border-right: 1px solid var(--border);
   color: var(--muted);
   cursor: pointer;
   font-size: 0.8rem;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
+  transition: color 0.15s ease, background 0.15s ease;
 }
-.sidebar.collapsed ~ .show-sidebar-btn { display: block; }
+.show-sidebar-btn:hover { color: var(--text); background: var(--code-bg); }
+.sidebar.collapsed ~ .show-sidebar-btn { display: flex; }
 
 /* Focus mode: full screen content only – smooth transitions */
 body[data-focus-mode="true"] .toolbar,
@@ -461,6 +463,9 @@ body[data-focus-mode="true"] .context-menu {
   visibility: hidden;
   pointer-events: none;
 }
+/* The rail is a flex item, so it must be fully removed (not just hidden) in focus
+   mode or it would reserve its width. Higher specificity than the collapsed rule. */
+body[data-focus-mode="true"] .sidebar.collapsed ~ .show-sidebar-btn { display: none; }
 body[data-focus-mode="true"] .main-wrap {
   position: fixed;
   inset: 0;
@@ -813,6 +818,11 @@ body[data-full-width="true"] .rendered {
 .md-block-blockquote .inline-edit { color: var(--muted); }
 .md-block-list .inline-edit {
   color: var(--text);
+}
+/* A list item edited in place (editEl is the <li> itself) must keep its hard
+   line breaks visible; the rendered <li> otherwise collapses newlines. */
+li.md-block-list.editing {
+  white-space: pre-wrap;
 }
 /* Bullet indicator for a div being converted to a list item mid-edit
    (before it is committed and re-rendered as a native <li>).

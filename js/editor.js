@@ -7,13 +7,36 @@ import {
   getContentEl,
   markEditDismissed,
 } from "./state.js";
-import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, indentListItem, outdentListItem, buildLinkedRaw } from "./blocks.js";
+import { blockRaw, blocksToContent, getInlineBlockType, getListPrefix, stripListMarker, applyBlockTypeFromText, moveListItemInBlocks, indentListItem, outdentListItem, buildLinkedRaw, serializeListItemBody, deserializeListItemBody } from "./blocks.js";
 import { getCharacterOffset, renderedOffsetToSourceOffset, getCaretOffset, setCaretPosition } from "./caret.js";
 import { saveToFile, pushUndo } from "./fileio.js";
 import { getActiveTab } from "./tabs.js";
 import { dbg, DEBUG_ENTER } from "./debug.js";
 import { getYank } from "./vim.js";
 import { clearIfActive as clearSearch } from "./search.js";
+
+// Read a contenteditable's text with <br>, block boundaries, and literal newlines
+// all normalised to "\n". Independent of innerText's sensitivity to CSS white-space
+// and of how the engine represents an inserted line break (<br>, <div>, or "\n").
+export function readEditableText(el) {
+  let text = "";
+  const walk = (parent) => {
+    parent.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent;
+      } else if (node.nodeName === "BR") {
+        text += "\n";
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const isBlock = /^(DIV|P|LI)$/.test(node.nodeName);
+        if (isBlock && text && !text.endsWith("\n")) text += "\n";
+        walk(node);
+        if (isBlock && !text.endsWith("\n")) text += "\n";
+      }
+    });
+  };
+  walk(el);
+  return text.replace(/\u00a0/g, " ").replace(/\n$/, "");
+}
 
 function executeListItemMove(direction, index, blocks, tab, contentEl) {
   const newIndex = moveListItemInBlocks(blocks, index, direction);
@@ -78,7 +101,8 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
 
   if (isListItemInPlace) {
     const listPrefix = getListPrefix(raw);
-    const stripped = stripListMarker(raw);
+    const listIndent = " ".repeat(listPrefix.length);
+    const stripped = deserializeListItemBody(stripListMarker(raw), listIndent);
     const listDepth = blocks[index].listDepth || 0;
     let offsetInRenderedLi = 0;
     if (clickEvent) {
@@ -138,12 +162,10 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
         : Math.min(offsetInRenderedLi, stripped.length);
 
     function getEditableText() {
-      return (
-        editEl.innerText != null ? editEl.innerText : editEl.textContent || ""
-      ).replace(/\u00a0/g, " ");
+      return readEditableText(editEl);
     }
     function getFullRaw() {
-      return listPrefix + getEditableText();
+      return listPrefix + serializeListItemBody(getEditableText(), listIndent);
     }
     function syncContentAndAutosave() {
       blocks[index].raw = getFullRaw();

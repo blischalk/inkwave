@@ -13,6 +13,9 @@ import {
   indentListItem,
   outdentListItem,
   buildLinkedRaw,
+  serializeListItemBody,
+  deserializeListItemBody,
+  getListItemDisplayHtml,
 } from "../../js/blocks.js";
 
 // ── getBlocks ────────────────────────────────────────────────────────────────
@@ -320,6 +323,75 @@ describe("stripListMarker", () => {
   it("returns empty string for null/undefined", () => {
     expect(stripListMarker(null)).toBe("");
     expect(stripListMarker(undefined)).toBe("");
+  });
+});
+
+describe("serializeListItemBody", () => {
+  const indent = "  "; // marker width for "- "
+
+  it("leaves single-line text unchanged", () => {
+    expect(serializeListItemBody("one line", indent)).toBe("one line");
+  });
+
+  it("hard-breaks and indents consecutive flow-text lines", () => {
+    expect(serializeListItemBody("line1\nline2", indent)).toBe("line1  \n  line2");
+  });
+
+  it("normalises trailing whitespace so breaks don't accumulate", () => {
+    expect(serializeListItemBody("line1  \nline2", indent)).toBe("line1  \n  line2");
+    expect(serializeListItemBody("line1   \nline2\t", indent)).toBe("line1  \n  line2");
+  });
+
+  it("indents a fenced code block without hard-breaking its lines", () => {
+    const text = "Strawberries\n```ruby\ndef foobar\n  return 1\n```";
+    expect(serializeListItemBody(text, indent)).toBe(
+      "Strawberries\n  ```ruby\n  def foobar\n    return 1\n  ```",
+    );
+  });
+
+  it("does not hard-break a flow line that precedes a code fence", () => {
+    expect(serializeListItemBody("intro\n```\ncode\n```", indent)).toBe(
+      "intro\n  ```\n  code\n  ```",
+    );
+  });
+
+  it("keeps blank interior lines empty (no stray indent)", () => {
+    expect(serializeListItemBody("a\n\nb", indent)).toBe("a\n\n  b");
+  });
+});
+
+describe("deserializeListItemBody", () => {
+  const indent = "  ";
+
+  it("is the inverse of serialize for flow text", () => {
+    const body = serializeListItemBody("line1\nline2", indent);
+    expect(deserializeListItemBody(body, indent)).toBe("line1\nline2");
+  });
+
+  it("is the inverse of serialize for a fenced code block", () => {
+    const text = "Strawberries\n```ruby\ndef foobar\n  return 1\n```";
+    const body = serializeListItemBody(text, indent);
+    expect(deserializeListItemBody(body, indent)).toBe(text);
+  });
+
+  it("strips only the marker-width indent, preserving deeper code indentation", () => {
+    expect(deserializeListItemBody("a\n      deep", indent)).toBe("a\n    deep");
+  });
+});
+
+describe("list item with a code block round-trips and renders", () => {
+  it("stays one block and renders a <pre><code> inside the <li>", () => {
+    const indent = "  ";
+    const editorText = "Strawberries\n```ruby\ndef foobar\n  return 1\n```";
+    const raw = "- " + serializeListItemBody(editorText, indent);
+    const content = blocksToContent([{ raw, type: "list", listDepth: 0 }]);
+    const reparsed = getBlocks(content).filter((b) => b.type === "list");
+    expect(reparsed.length).toBe(1);
+    const html = getListItemDisplayHtml(reparsed[0].raw).toLowerCase();
+    expect(html).toContain("strawberries");
+    expect(html).toContain("<pre>");
+    expect(html).toContain("<code");
+    expect(html).toContain("def foobar");
   });
 });
 

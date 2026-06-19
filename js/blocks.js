@@ -145,6 +145,61 @@ export function isOrderedListPrefix(prefix) {
   return prefix && /^\d+\.\s$/.test(prefix);
 }
 
+const CODE_FENCE_RE = /^\s*(```|~~~)/;
+
+/**
+ * Classify each line as "flow text" (true) or structural/code (false). Lines
+ * inside a fenced code block, and the fence delimiters themselves, are not flow.
+ */
+function flowTextLines(lines) {
+  let inFence = false;
+  return lines.map((line) => {
+    if (CODE_FENCE_RE.test(line)) {
+      inFence = !inFence;
+      return false;
+    }
+    return !inFence;
+  });
+}
+
+/**
+ * Serialise a list item's editor text (plain "\n"-separated) into the Markdown
+ * that belongs under the bullet. Continuation lines are indented by the marker
+ * width so block content (fenced code, etc.) stays inside the item; consecutive
+ * flow-text lines get hard breaks so they render on separate lines; fenced code
+ * is left intact (no hard breaks, content preserved verbatim aside from indent).
+ */
+export function serializeListItemBody(text, indent) {
+  const lines = String(text).split("\n");
+  const isFlow = flowTextLines(lines);
+  return lines
+    .map((line, i) => {
+      const content = line.replace(/[ \t]+$/, "");
+      const isBlank = content.trim() === "";
+      const nextFlowText =
+        i + 1 < lines.length && isFlow[i + 1] && lines[i + 1].trim() !== "";
+      const hardBreak = isFlow[i] && !isBlank && nextFlowText ? "  " : "";
+      const prefix = i === 0 || isBlank ? "" : indent;
+      return prefix + content + hardBreak;
+    })
+    .join("\n");
+}
+
+/**
+ * Inverse of serializeListItemBody: strip the marker-width continuation indent
+ * and trailing hard-break spaces so the editor shows clean, column-zero text.
+ */
+export function deserializeListItemBody(body, indent) {
+  const stripIndent = new RegExp("^ {1," + Math.max(1, indent.length) + "}");
+  return String(body)
+    .split("\n")
+    .map((line, i) => {
+      const noTrail = line.replace(/[ \t]+$/, "");
+      return i === 0 ? noTrail : noTrail.replace(stripIndent, "");
+    })
+    .join("\n");
+}
+
 export function getListItemDisplayHtml(raw) {
   if (!raw || typeof raw !== "string") return "";
   const parsed = marked.parse(raw);
