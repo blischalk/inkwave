@@ -16,6 +16,7 @@ import {
 import { getTabTitle } from "./tabs.js";
 import { saveToFile } from "./fileio.js";
 import { isOpen as isSearchOpen } from "./search.js";
+import { wireTableEditing } from "./table.js";
 
 // ── Footnote rendering ────────────────────────────────────────────────────────
 // marked-footnote cannot work with per-block parsing, so footnotes are handled
@@ -415,6 +416,8 @@ export function showTabContent(tab, preferredBlocks) {
     contentEl.querySelectorAll(".md-block").forEach((blockEl) => {
       blockEl.addEventListener("dblclick", (e) => {
         if (!dblClickEdit || isSearchOpen()) return;
+        // Tables edit per-cell (see wireTableEditing); never edit the whole block.
+        if (blockEl.classList.contains("md-block-table")) return;
         if (e.target.classList && e.target.classList.contains("inline-edit"))
           return;
         // Nested list items are .md-block inside .md-block; only the innermost
@@ -438,6 +441,11 @@ export function showTabContent(tab, preferredBlocks) {
           if (onStartInlineEdit) onStartInlineEdit(codeBlockEl, idx, currentBlocks, tab, e);
         });
       });
+    contentEl.querySelectorAll(".md-block-table").forEach((tableBlockEl) => {
+      const idx = parseInt(tableBlockEl.getAttribute("data-block-index"), 10);
+      if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
+      wireTableEditing(tableBlockEl, idx, tab);
+    });
     wireImageResize(contentEl, tab, currentBlocks);
     wireCheckboxes(contentEl, tab);
     // Click anywhere in content area (including padding/empty space) but not on a block → new paragraph
