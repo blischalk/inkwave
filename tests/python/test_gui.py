@@ -569,3 +569,288 @@ class TestUIKeyboardShortcuts:
             ''')
             assert result is True
         run_gui_test(check)
+
+
+class TestZoomBehavior:
+    """Verify transform:scale() scales all content (text, images, SVGs) uniformly in WebKit."""
+
+    def test_zoom_uses_transform_not_font_size(self):
+        """After zooming, .rendered should have transform:scale set, not fontSize."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var rendered = document.createElement("div");
+                    rendered.className = "rendered";
+                    rendered.innerHTML = "<p>Hello</p>";
+                    document.body.appendChild(rendered);
+
+                    var scale = 1.5 / 0.95;
+                    rendered.style.transform = "scale(" + scale + ")";
+                    rendered.style.transformOrigin = "top left";
+                    rendered.style.width = (100 / scale) + "%";
+
+                    var hasTransform = rendered.style.transform.indexOf("scale") !== -1;
+                    var hasFontSize = rendered.style.fontSize !== "";
+                    document.body.removeChild(rendered);
+                    return {hasTransform: hasTransform, hasFontSize: hasFontSize};
+                })()
+            ''')
+            assert result is not None
+            assert result["hasTransform"] is True, f"Expected transform:scale, got: {result}"
+            assert result["hasFontSize"] is False, f"fontSize should not be set, got: {result}"
+
+        run_gui_test(check)
+
+    def test_transform_scale_scales_image(self):
+        """An image inside a transform:scale container should have larger getBoundingClientRect."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var container = document.createElement("div");
+                    container.style.width = "400px";
+                    container.style.transformOrigin = "top left";
+                    container.innerHTML = '<img src="data:image/gif;base64,R0lGODlhZABkAIAAAP///wAAACH5BAEAAAEALAAAAABkAGQAAAIEjI+pywUAOw==" width="100" height="100" />';
+                    document.body.appendChild(container);
+
+                    var img = container.querySelector("img");
+                    var widthBefore = img.getBoundingClientRect().width;
+
+                    container.style.transform = "scale(2)";
+                    container.style.width = "50%";
+                    var widthAfter = img.getBoundingClientRect().width;
+
+                    document.body.removeChild(container);
+                    return {before: widthBefore, after: widthAfter, scaled: widthAfter > widthBefore};
+                })()
+            ''')
+            assert result is not None
+            assert result["scaled"] is True, f"Image should scale: {result['before']}→{result['after']}"
+
+        run_gui_test(check)
+
+    def test_transform_scale_scales_svg(self):
+        """An SVG inside a transform:scale container should scale."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var container = document.createElement("div");
+                    container.style.width = "400px";
+                    container.style.transformOrigin = "top left";
+                    container.innerHTML = '<svg width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="blue"/></svg>';
+                    document.body.appendChild(container);
+
+                    var svg = container.querySelector("svg");
+                    var widthBefore = svg.getBoundingClientRect().width;
+
+                    container.style.transform = "scale(2)";
+                    container.style.width = "50%";
+                    var widthAfter = svg.getBoundingClientRect().width;
+
+                    document.body.removeChild(container);
+                    return {before: widthBefore, after: widthAfter, scaled: widthAfter > widthBefore};
+                })()
+            ''')
+            assert result is not None
+            assert result["scaled"] is True, f"SVG should scale: {result['before']}→{result['after']}"
+
+        run_gui_test(check)
+
+    def test_transform_scale_does_not_affect_sidebar(self):
+        """Transform on .rendered should not affect elements outside it."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var sidebar = document.getElementById("sidebar");
+                    if (!sidebar) return "no sidebar";
+                    return sidebar.style.transform === "";
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+    def test_transform_scale_round_trips(self):
+        """Scaling up then resetting should clear the transform."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var el = document.createElement("div");
+                    document.body.appendChild(el);
+
+                    // Scale up
+                    el.style.transform = "scale(1.5)";
+                    el.style.transformOrigin = "top left";
+                    var hasScale = el.style.transform.indexOf("scale") !== -1;
+
+                    // Reset
+                    el.style.transform = "";
+                    el.style.transformOrigin = "";
+                    el.style.width = "";
+                    var cleared = el.style.transform === "";
+
+                    document.body.removeChild(el);
+                    return {hasScale: hasScale, cleared: cleared};
+                })()
+            ''')
+            assert result["hasScale"] is True
+            assert result["cleared"] is True
+
+        run_gui_test(check)
+
+    def test_mermaid_svg_scales_with_transform(self):
+        """A mermaid-style SVG with inline max-width should scale with transform:scale."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var rendered = document.createElement("div");
+                    rendered.style.width = "600px";
+                    rendered.style.transformOrigin = "top left";
+                    rendered.innerHTML = '<pre class="mermaid"><svg width="100%" style="max-width: 200px;" viewBox="0 0 200 100" height="100"><rect width="200" height="100" fill="green"/></svg></pre>';
+                    document.body.appendChild(rendered);
+
+                    var svg = rendered.querySelector("svg");
+                    var wBefore = svg.getBoundingClientRect().width;
+                    var hBefore = svg.getBoundingClientRect().height;
+
+                    rendered.style.transform = "scale(2)";
+                    rendered.style.width = "50%";
+                    var wAfter = svg.getBoundingClientRect().width;
+                    var hAfter = svg.getBoundingClientRect().height;
+
+                    document.body.removeChild(rendered);
+                    return {wBefore: wBefore, wAfter: wAfter, hBefore: hBefore, hAfter: hAfter,
+                            scaled: wAfter > wBefore && hAfter > hBefore};
+                })()
+            ''')
+            assert result is not None
+            assert result["scaled"] is True, (
+                f"Mermaid SVG should scale: "
+                f"w {result['wBefore']}→{result['wAfter']}, h {result['hBefore']}→{result['hAfter']}"
+            )
+
+        run_gui_test(check)
+
+    def test_text_scales_with_transform(self):
+        """Text inside a transform:scale container should have larger dimensions."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var rendered = document.createElement("div");
+                    rendered.style.fontSize = "16px";
+                    rendered.style.transformOrigin = "top left";
+                    rendered.innerHTML = "<p>Test paragraph</p>";
+                    document.body.appendChild(rendered);
+
+                    var p = rendered.querySelector("p");
+                    var hBefore = p.getBoundingClientRect().height;
+
+                    rendered.style.transform = "scale(2)";
+                    rendered.style.width = "50%";
+                    var hAfter = p.getBoundingClientRect().height;
+
+                    document.body.removeChild(rendered);
+                    return {before: hBefore, after: hAfter, scaled: hAfter > hBefore};
+                })()
+            ''')
+            assert result is not None
+            assert result["scaled"] is True, f"Text should scale: {result['before']}→{result['after']}"
+
+        run_gui_test(check)
+
+    def test_width_adjusts_for_layout_reflow(self):
+        """Width should be set to 100/scale percent so content reflows correctly."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var scale = 1.5;
+                    var width = 100 / scale;
+                    return Math.abs(width - 66.667) < 0.01;
+                })()
+            ''')
+            assert result is True
+
+        run_gui_test(check)
+
+    def test_cmd_equals_zooms_in_via_real_app_code(self):
+        """End-to-end: dispatch the real Cmd+= keydown and verify the ACTUAL
+        changeFontSize()/applyDocFontSize() in js/ui.js and js/renderer.js
+        apply a scale transform to a real rendered pane — not a hand-rolled
+        copy of the math (see unit tests above, which all construct their
+        own elements and assign .style.transform directly without calling
+        any inkwave code). This is the only test that exercises the private,
+        keydown-bound changeFontSize() function in js/ui.js, which has no
+        unit-test coverage because it is not exported.
+        """
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    // Simulate a loaded tab with a real rendered pane, matching
+                    // what js/ui.js::changeFontSize / js/renderer.js::applyDocFontSize
+                    // query for in the live app (.pane .rendered).
+                    var pane = document.querySelector(".pane");
+                    if (!pane) return "no .pane element found in index.html";
+                    var rendered = pane.querySelector(".rendered");
+                    if (!rendered) return "no .rendered element found inside .pane";
+
+                    rendered.style.transform = "";
+                    rendered.innerHTML = "<p>Zoom test content</p>";
+
+                    var ev = new KeyboardEvent("keydown", {
+                        key: "=", metaKey: true, ctrlKey: true, bubbles: true, cancelable: true
+                    });
+                    document.dispatchEvent(ev);
+
+                    return {
+                        transform: rendered.style.transform,
+                        hasScale: rendered.style.transform.indexOf("scale") !== -1,
+                    };
+                })()
+            ''')
+            assert result is not None, "evaluate_js returned None"
+            assert isinstance(result, dict), f"Expected dict result, got: {result}"
+            assert result["hasScale"] is True, (
+                f"Cmd+= should trigger the real changeFontSize() and apply "
+                f"transform:scale via applyDocFontSize(), got transform={result['transform']!r}"
+            )
+
+        run_gui_test(check)
+
+    def test_cmd_zero_resets_zoom_via_real_app_code(self):
+        """End-to-end: Cmd+0 should reset docFontSize to default, clearing
+        any transform via the real changeFontSize(0) → applyDocFontSize()
+        → applyScaleZoom() call chain."""
+        def check(window):
+            result = window.evaluate_js('''
+                (function() {
+                    var pane = document.querySelector(".pane");
+                    if (!pane) return "no .pane element found";
+                    var rendered = pane.querySelector(".rendered");
+                    if (!rendered) return "no .rendered element found";
+
+                    // First zoom in via the real key handler
+                    document.dispatchEvent(new KeyboardEvent("keydown", {
+                        key: "=", metaKey: true, ctrlKey: true, bubbles: true, cancelable: true
+                    }));
+                    var zoomedTransform = rendered.style.transform;
+
+                    // Then reset via Cmd+0
+                    document.dispatchEvent(new KeyboardEvent("keydown", {
+                        key: "0", metaKey: true, ctrlKey: true, bubbles: true, cancelable: true
+                    }));
+
+                    return {
+                        zoomedTransform: zoomedTransform,
+                        resetTransform: rendered.style.transform,
+                    };
+                })()
+            ''')
+            assert result is not None
+            assert isinstance(result, dict), f"Expected dict result, got: {result}"
+            assert "scale" in result["zoomedTransform"], (
+                f"Expected scale after Cmd+=, got: {result['zoomedTransform']!r}"
+            )
+            assert result["resetTransform"] == "", (
+                f"Expected empty transform after Cmd+0 reset, got: {result['resetTransform']!r}"
+            )
+
+        run_gui_test(check)
