@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.parse
@@ -638,12 +639,14 @@ class Api:
         try:
             if sys.platform == "darwin":
                 from AppKit import NSWorkspace
-                NSWorkspace.sharedWorkspace().openFile_(path)
+                if not NSWorkspace.sharedWorkspace().openFile_(path):
+                    return {"error": "No application available to open this file."}
             elif os.name == "nt":
                 os.startfile(path)  # noqa: not shell execution
             else:
                 import webbrowser
-                webbrowser.open("file://" + urllib.parse.quote(path))
+                if not webbrowser.open("file://" + urllib.parse.quote(path)):
+                    return {"error": "Could not open file in default application."}
             return {"success": True}
         except Exception as e:
             return {"error": str(e)}
@@ -667,6 +670,28 @@ class Api:
             except Exception:
                 return {}
 
+    @staticmethod
+    def _atomic_write_json(path, data):
+        """Write `data` as JSON to `path` atomically.
+
+        Writes to a temp file in the same directory, then os.replace()'s it
+        over the target — atomic on both POSIX and modern Windows. Prevents
+        the plain open(path, "w") truncate-then-write pattern from leaving
+        an empty or partially-written file (and losing every previously
+        saved setting) if the process dies mid-write."""
+        dir_name = os.path.dirname(path) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
     def save_setting(self, key, value):
         """Persist a single setting by key."""
         logger.debug("save_setting: %s", key)
@@ -679,8 +704,7 @@ class Api:
                 except Exception:
                     data = {}
                 data[key] = value
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f)
+                self._atomic_write_json(path, data)
                 return {"ok": True}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -688,20 +712,20 @@ class Api:
     # ── Multi-provider API key management ────────────────────────────────────
 
     def _set_key_flag(self, provider, has_key):
-        """Write {provider}_key_set flag to settings file so status checks never touch keychain."""
+        """Write {provider}_key_set flag to settings file so status checks never touch keychain.
+
+        Raises on write failure so callers can report the error rather than
+        silently leaving the flag out of sync with the keyring.
+        """
         with self._settings_lock:
+            path = self._settings_path()
             try:
-                path = self._settings_path()
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except Exception:
-                    data = {}
-                data[f"{provider}_key_set"] = has_key
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f)
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
             except Exception:
-                pass
+                data = {}
+            data[f"{provider}_key_set"] = has_key
+            self._atomic_write_json(path, data)
 
     def save_provider_api_key(self, provider, key):
         """Store an API key for a given provider in OS keychain. Returns {ok: bool, error?}."""
