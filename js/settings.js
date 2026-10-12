@@ -102,7 +102,17 @@ export function saveSettings(settings) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
   const a = getApi();
   if (a && typeof a.save_setting === "function") {
-    Object.entries(settings).forEach(([k, v]) => a.save_setting(k, String(v)));
+    Object.entries(settings).forEach(([k, v]) => {
+      a.save_setting(k, String(v))
+        .then((result) => {
+          if (!result || !result.ok) {
+            console.error(`Failed to persist setting "${k}":`, result && result.error);
+          }
+        })
+        .catch((err) => {
+          console.error(`Failed to persist setting "${k}":`, err);
+        });
+    });
   }
 }
 

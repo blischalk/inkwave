@@ -189,13 +189,47 @@ BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 
 # User data dir for settings — must be writable and persistent across runs.
 # _MEIPASS is a temp dir that's wiped on exit, so we can't write settings there.
-def _user_data_dir():
+def _user_data_dir(app_name: str = "Inkwave") -> str:
+    """Return the OS app-data directory for `app_name`.
+
+    Default matches the production app's historical path exactly — callers
+    that don't pass app_name see zero behavior change.
+
+    Raises:
+        ValueError: if app_name is empty or contains path-traversal segments.
+    """
+    if not app_name:
+        raise ValueError("app_name must be non-empty")
+    if os.path.sep in app_name or (os.path.altsep and os.path.altsep in app_name) or ".." in app_name:
+        raise ValueError(f"app_name must not contain path separators or '..': {app_name!r}")
     if sys.platform == 'darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Inkwave')
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', app_name)
     elif os.name == 'nt':
-        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Inkwave')
+        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
     else:
-        return os.path.join(os.path.expanduser('~'), '.inkwave')
+        return os.path.join(os.path.expanduser('~'), '.' + app_name.lower())
+
+
+# Shared dev-build app name, kept in sync with inkwave.spec's _display_name/
+# _exe_name derivation via test_build_dev.py's exact-string-match assertion
+# (PyInstaller .spec files cannot import from app.py at analysis time).
+_DEV_APP_NAME = "Inkwave-Dev"
+
+
+def _is_dev_build() -> bool:
+    """Return True if the frozen bundle's `_devbuild` marker file is present
+    alongside BASE_DIR. Always False when not frozen — the marker is only
+    ever extracted into a PyInstaller-frozen bundle's _MEIPASS directory,
+    never present when running from source."""
+    return os.path.exists(os.path.join(BASE_DIR, "_devbuild"))
+
+
+def _app_name() -> str:
+    """Return 'Inkwave-Dev' if this is a dev build, else 'Inkwave'.
+
+    Single source of truth for the app-data directory name, consumed by
+    _settings_path() and main()'s log file setup."""
+    return _DEV_APP_NAME if _is_dev_build() else "Inkwave"
 
 # File dialog types (new API + fallbacks for older pywebview)
 _file_dialog = getattr(webview, "FileDialog", None)
@@ -648,7 +682,7 @@ class Api:
 
     def _settings_path(self):
         if getattr(sys, 'frozen', False):
-            base = _user_data_dir()
+            base = _user_data_dir(_app_name())
             os.makedirs(base, exist_ok=True)
         else:
             base = BASE_DIR
@@ -879,7 +913,7 @@ def main():
     logging.root.addHandler(console_h)
     logging.root.setLevel(log_level)
     try:
-        log_dir = _user_data_dir()
+        log_dir = _user_data_dir(_app_name()) if getattr(sys, 'frozen', False) else BASE_DIR
         os.makedirs(log_dir, exist_ok=True)
         file_h = RotatingFileHandler(
             os.path.join(log_dir, "inkwave.log"),
@@ -970,8 +1004,8 @@ def main():
             window.evaluate_js(
                 "if (window.__applySettings) window.__applySettings(" + json.dumps(arg) + ");"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("inject_settings: failed to push settings to JS: %s", e)
 
     _pending_open_paths = []
 
@@ -1058,8 +1092,8 @@ def main():
         window.events.loaded += inject_settings
         window.events.loaded += inject_open_file
         window.events.loaded += inject_edit_menu
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to register window.events.loaded callbacks: %s", e)
 
     # Persist window geometry on resize/move (debounced)
     _geo_timer = None

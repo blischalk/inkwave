@@ -227,6 +227,63 @@ class TestSaveImage:
         assert "(" not in result["name"]
 
 
+# ── _settings_path (real branch logic, NOT via the api fixture's monkeypatch) ─
+
+class TestSettingsPath:
+    """Tests Api._settings_path()'s own frozen/dev branch logic directly.
+
+    Deliberately does NOT use the `api` fixture, which replaces
+    _settings_path with a lambda and would bypass the exact logic under
+    test here (see golden plan Worry 5)."""
+
+    def test_not_frozen_uses_base_dir(self, monkeypatch):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", False, raising=False)
+        path = a._settings_path()
+        assert path == os.path.join(app.BASE_DIR, "settings.json")
+
+    def test_frozen_production_uses_user_data_dir_inkwave(self, monkeypatch, tmp_path):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))  # no _devbuild marker here
+        path = a._settings_path()
+        assert "Inkwave" in path
+        assert "Inkwave-Dev" not in path
+        assert path.endswith("settings.json")
+
+    def test_frozen_dev_build_uses_user_data_dir_inkwave_dev(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        path = a._settings_path()
+        assert "Inkwave-Dev" in path
+
+    def test_frozen_creates_directory_if_missing(self, monkeypatch, tmp_path):
+        fresh_base = tmp_path / "fresh"
+        fresh_base.mkdir()
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "_user_data_dir",
+                            lambda app_name="Inkwave": str(tmp_path / "newly_created_dir"))
+        a._settings_path()
+        assert (tmp_path / "newly_created_dir").is_dir()
+
+    def test_frozen_prod_and_dev_resolve_to_different_paths(self, monkeypatch, tmp_path):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        prod_path = a._settings_path()
+        (tmp_path / "_devbuild").write_text("")
+        dev_path = a._settings_path()
+        assert prod_path != dev_path
+
+
 # ── load_settings / save_setting ─────────────────────────────────────────────
 
 class TestSettings:
@@ -254,6 +311,44 @@ class TestSettings:
     def test_save_setting_returns_ok_true(self, api):
         result = api.save_setting("x", 1)
         assert result == {"ok": True}
+
+    def test_save_setting_returns_ok_false_on_permission_denied(self, api, tmp_path, monkeypatch):
+        # Lock the settings directory read-only so the write raises PermissionError.
+        settings_dir = tmp_path / "readonly"
+        settings_dir.mkdir()
+        settings_file = settings_dir / "settings.json"
+        api._settings_path = lambda: str(settings_file)
+        settings_dir.chmod(0o444)
+        try:
+            result = api.save_setting("theme", "obsidianite")
+            assert result["ok"] is False
+            assert "error" in result
+        finally:
+            settings_dir.chmod(0o755)  # restore so tmp_path cleanup can remove it
+
+    def test_save_setting_does_not_raise_when_settings_path_is_a_directory(self, api, tmp_path):
+        # Edge case: a directory exists where settings.json should be a file.
+        bogus_dir = tmp_path / "settings.json"
+        bogus_dir.mkdir()
+        api._settings_path = lambda: str(bogus_dir)
+        result = api.save_setting("theme", "obsidianite")
+        assert result["ok"] is False
+        assert "error" in result
+
+    def test_save_setting_failure_does_not_crash_subsequent_load(self, api, tmp_path):
+        # A failed save must not corrupt the settings file for a later load.
+        api.save_setting("theme", "lavender")
+        bogus_dir = tmp_path / "blocked"
+        bogus_dir.mkdir(mode=0o444)
+        try:
+            api._settings_path = lambda: str(bogus_dir / "settings.json")
+            api.save_setting("theme", "obsidianite")
+            # Switch back to the real (succeeding) path and confirm the
+            # earlier successful save is still intact and readable.
+            api._settings_path = lambda: str(tmp_path / "settings.json")
+            assert api.load_settings()["theme"] == "lavender"
+        finally:
+            bogus_dir.chmod(0o755)
 
 
 # ── get_provider_api_key_status ───────────────────────────────────────────────

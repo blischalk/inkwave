@@ -96,7 +96,17 @@ function commitOption(themeId) {
   applyTheme(themeId);
   if (themePickerBtn) themePickerBtn.focus();
   const a = getApi();
-  if (a && typeof a.save_setting === "function") a.save_setting("theme", themeId);
+  if (a && typeof a.save_setting === "function") {
+    a.save_setting("theme", themeId)
+      .then((result) => {
+        if (!result || !result.ok) {
+          console.error("Failed to persist theme setting:", result && result.error);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to persist theme setting:", err);
+      });
+  }
 }
 
 if (themePickerBtn) {
