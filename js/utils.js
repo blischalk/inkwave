@@ -30,7 +30,7 @@ export function resolveMermaidTheme() {
   return _LIGHT_THEMES.has(theme) ? "default" : "dark";
 }
 
-let _mermaidLoadPromise = null;
+let _mermaidReady = null; // Promise that resolves when mermaid is loaded
 
 async function loadMermaid() {
   try {
@@ -48,14 +48,18 @@ async function loadMermaid() {
   }
 }
 
-function ensureMermaid() {
-  if (!_mermaidLoadPromise) {
-    _mermaidLoadPromise = loadMermaid().catch((e) => {
-      _mermaidLoadPromise = null;
-      throw e;
-    });
-  }
-  return _mermaidLoadPromise;
+async function ensureMermaid() {
+  if (_mermaidReady) return _mermaidReady;
+  _mermaidReady = (async () => {
+    log.debug("loading mermaid library…");
+    const mm = await loadMermaid();
+    log.debug("mermaid loaded");
+    return mm;
+  })().catch((e) => {
+    _mermaidReady = null;
+    throw e;
+  });
+  return _mermaidReady;
 }
 
 async function renderMermaidBlocks(container) {
