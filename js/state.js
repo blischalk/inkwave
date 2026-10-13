@@ -70,6 +70,9 @@ export function getContentEl() {
 export let dblClickEdit = true;
 export function setDblClickEdit(v) { dblClickEdit = v; }
 
+export let showWelcomeOnStartup = true;
+export function setShowWelcomeOnStartup(v) { showWelcomeOnStartup = v; }
+
 // Timestamp of the most recent inline-edit dismissal, used so the click that
 // blurred an editor isn't also treated as an empty-space click to add a block.
 export let lastEditDismissAt = 0;

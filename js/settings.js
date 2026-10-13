@@ -1,4 +1,4 @@
-import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold, fullWidth, setFullWidth, dblClickEdit, setDblClickEdit } from "./state.js";
+import { vimMode, setVimMode, rawMode, contentEl, setLlmProvider, setLlmModel, llmProvider, llmModel, gradientBold, setGradientBold, fullWidth, setFullWidth, dblClickEdit, setDblClickEdit, showWelcomeOnStartup, setShowWelcomeOnStartup } from "./state.js";
 import { getApi } from "./api.js";
 import { initBlockNav, clearBlockNav, applyVimMode, removeVimMode } from "./vim.js";
 
@@ -9,6 +9,7 @@ const vimToggle           = document.getElementById("vimModeToggle");
 const gradientBoldToggle  = document.getElementById("gradientBoldToggle");
 const fullWidthToggle     = document.getElementById("fullWidthToggle");
 const dblClickEditToggle  = document.getElementById("dblClickEditToggle");
+const showWelcomeToggle   = document.getElementById("showWelcomeToggle");
 
 // Provider / model selects (settings panel)
 const llmProviderSelect = document.getElementById("llmProviderSelect");
@@ -267,6 +268,14 @@ export function initSettings() {
     dblClickEditToggle.setAttribute("aria-checked", dblClickEditOn ? "true" : "false");
   }
 
+  // Show welcome screen on startup (default on)
+  const showWelcomeOn = saved.showWelcomeOnStartup !== false;
+  setShowWelcomeOnStartup(showWelcomeOn);
+  if (showWelcomeToggle) {
+    showWelcomeToggle.checked = showWelcomeOn;
+    showWelcomeToggle.setAttribute("aria-checked", showWelcomeOn ? "true" : "false");
+  }
+
   // Vim mode
   if (saved.vimMode === true) {
     setVimMode(true);
@@ -310,6 +319,10 @@ function openSettings() {
   if (dblClickEditToggle) {
     dblClickEditToggle.checked = dblClickEdit;
     dblClickEditToggle.setAttribute("aria-checked", dblClickEdit ? "true" : "false");
+  }
+  if (showWelcomeToggle) {
+    showWelcomeToggle.checked = showWelcomeOnStartup;
+    showWelcomeToggle.setAttribute("aria-checked", showWelcomeOnStartup ? "true" : "false");
   }
   // Sync selects to current state (may have been changed via chat panel)
   if (llmProviderSelect) llmProviderSelect.value = llmProvider;
@@ -423,6 +436,15 @@ if (dblClickEditToggle) {
     setDblClickEdit(newVal);
     dblClickEditToggle.setAttribute("aria-checked", newVal ? "true" : "false");
     const s = loadSettings(); s.dblClickEdit = newVal; saveSettings(s);
+  });
+}
+
+if (showWelcomeToggle) {
+  showWelcomeToggle.addEventListener("change", () => {
+    const newVal = showWelcomeToggle.checked;
+    setShowWelcomeOnStartup(newVal);
+    showWelcomeToggle.setAttribute("aria-checked", newVal ? "true" : "false");
+    const s = loadSettings(); s.showWelcomeOnStartup = newVal; saveSettings(s);
   });
 }
 

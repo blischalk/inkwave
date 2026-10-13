@@ -1183,6 +1183,15 @@ body[data-debug="true"] .debug-panel { display: block; }
   color: var(--muted);
   line-height: 1.4;
 }
+.welcome-dismiss-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
 .settings-toggle {
   appearance: none;
   -webkit-appearance: none;

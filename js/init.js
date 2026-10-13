@@ -1,8 +1,9 @@
 import {
   contentEl, filenameEl, tabs,
-  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize, setGradientBold,
+  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, setGradientBold,
+  showWelcomeOnStartup, setShowWelcomeOnStartup,
 } from "./state.js";
-import { loadSettings, applyGradientBold, applyFullWidth } from "./settings.js";
+import { loadSettings, saveSettings, applyGradientBold, applyFullWidth } from "./settings.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
@@ -57,21 +58,50 @@ window.__applySettings = function (dataStr) {
   } catch (e) {}
 })();
 
+// ── renderWelcomeContent ───────────────────────────────────────────────────────
+// Shared render body for both __applyWelcome and loadWelcome()'s finish().
+// Renders the parsed Welcome.md content and appends the inline dismiss checkbox.
+function renderWelcomeContent(data) {
+  setWelcomeContent(data.content);
+  if (tabs.length > 0) return;
+  contentEl.className = "content";
+  contentEl.innerHTML =
+    '<div class="rendered">' + marked.parse(data.content) + "</div>";
+  highlightCodeInContainer(contentEl);
+  const r = contentEl.querySelector(".rendered");
+  if (r) applyScaleZoom(r);
+  filenameEl.textContent = "Welcome";
+
+  const dismissRow = document.createElement("label");
+  dismissRow.className = "welcome-dismiss-row";
+  dismissRow.innerHTML =
+    '<input type="checkbox" id="welcomeDismissCheckbox"> ' +
+    "Don't show this on startup";
+  contentEl.appendChild(dismissRow);
+  const dismissCheckbox = dismissRow.querySelector("#welcomeDismissCheckbox");
+  dismissCheckbox.addEventListener("change", () => {
+    const checked = dismissCheckbox.checked;
+    const newVal = !checked;
+    setShowWelcomeOnStartup(newVal);
+    const s = loadSettings();
+    s.showWelcomeOnStartup = newVal;
+    saveSettings(s);
+    const settingsToggle = document.getElementById("showWelcomeToggle");
+    if (settingsToggle) {
+      settingsToggle.checked = newVal;
+      settingsToggle.setAttribute("aria-checked", newVal ? "true" : "false");
+    }
+  });
+}
+
 // ── window.__applyWelcome ─────────────────────────────────────────────────────
 // Called by Python to inject Welcome.md content directly (fast path).
 window.__applyWelcome = function (dataStr) {
   try {
     const data = JSON.parse(dataStr);
     if (data && data.content != null) {
-      setWelcomeContent(data.content);
-      if (tabs.length > 0) return;
-      contentEl.className = "content";
-      contentEl.innerHTML =
-        '<div class="rendered">' + marked.parse(data.content) + "</div>";
-      highlightCodeInContainer(contentEl);
-      const r = contentEl.querySelector(".rendered");
-      if (r) r.style.fontSize = docFontSize + "rem";
-      filenameEl.textContent = "Welcome";
+      if (!showWelcomeOnStartup) return;
+      renderWelcomeContent(data);
     }
   } catch (e) {}
 };
@@ -121,15 +151,11 @@ export function loadWelcome() {
     if (done) return;
     done = true;
     if (data && data.content) {
-      setWelcomeContent(data.content);
-      if (tabs.length > 0) return;
-      contentEl.className = "content";
-      contentEl.innerHTML =
-        '<div class="rendered">' + marked.parse(data.content) + "</div>";
-      highlightCodeInContainer(contentEl);
-      const r = contentEl.querySelector(".rendered");
-      if (r) r.style.fontSize = docFontSize + "rem";
-      filenameEl.textContent = "Welcome";
+      if (!showWelcomeOnStartup) {
+        showFallbackContent();
+        return;
+      }
+      renderWelcomeContent(data);
     } else {
       showFallbackContent();
     }
