@@ -118,6 +118,62 @@ describe("resolveMermaidTheme", () => {
     expect(resolveMermaidTheme()).toBe("default");
   });
 
+  // Remaining dark themes, verified against each theme's real --bg value in
+  // style.css (all are dark backgrounds): ctp-frappe #303446, ctp-macchiato
+  // #24273a, forest #1a2421, gruvbox #282828, high-contrast #0c0c0c,
+  // midnight #0d0d18, mocha #1e1e2e, molokai #1b1d1e, rose-pine #191724,
+  // slime #181c18. Previously only 3 of 18 total themes were covered
+  // (obsidianite, dracula, nord); this closes the gap to all 18.
+  it("returns 'dark' for ctp-frappe", () => {
+    document.body.setAttribute("data-theme", "ctp-frappe");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for ctp-macchiato", () => {
+    document.body.setAttribute("data-theme", "ctp-macchiato");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for forest", () => {
+    document.body.setAttribute("data-theme", "forest");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for gruvbox", () => {
+    document.body.setAttribute("data-theme", "gruvbox");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for high-contrast", () => {
+    document.body.setAttribute("data-theme", "high-contrast");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for midnight", () => {
+    document.body.setAttribute("data-theme", "midnight");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for mocha", () => {
+    document.body.setAttribute("data-theme", "mocha");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for molokai", () => {
+    document.body.setAttribute("data-theme", "molokai");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for rose-pine", () => {
+    document.body.setAttribute("data-theme", "rose-pine");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
+  it("returns 'dark' for slime", () => {
+    document.body.setAttribute("data-theme", "slime");
+    expect(resolveMermaidTheme()).toBe("dark");
+  });
+
   it("returns 'dark' for an unknown theme", () => {
     document.body.setAttribute("data-theme", "some-future-theme");
     expect(resolveMermaidTheme()).toBe("dark");
