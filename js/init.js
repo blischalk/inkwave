@@ -1,11 +1,12 @@
 import {
   contentEl, filenameEl, tabs,
-  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize, setGradientBold,
+  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, setGradientBold,
 } from "./state.js";
 import { loadSettings, applyGradientBold, applyFullWidth } from "./settings.js";
 import { getApi } from "./api.js";
 import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
+import { applyScaleZoom } from "./renderer.js";
 import { addTab } from "./tabs.js";
 import { initTree, selectFile } from "./filetree.js";
 
@@ -70,7 +71,7 @@ window.__applyWelcome = function (dataStr) {
         '<div class="rendered">' + marked.parse(data.content) + "</div>";
       highlightCodeInContainer(contentEl);
       const r = contentEl.querySelector(".rendered");
-      if (r) r.style.fontSize = docFontSize + "rem";
+      if (r) applyScaleZoom(r);
       filenameEl.textContent = "Welcome";
     }
   } catch (e) {}
@@ -128,7 +129,7 @@ export function loadWelcome() {
         '<div class="rendered">' + marked.parse(data.content) + "</div>";
       highlightCodeInContainer(contentEl);
       const r = contentEl.querySelector(".rendered");
-      if (r) r.style.fontSize = docFontSize + "rem";
+      if (r) applyScaleZoom(r);
       filenameEl.textContent = "Welcome";
     } else {
       showFallbackContent();
