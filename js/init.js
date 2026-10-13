@@ -1,7 +1,7 @@
 import {
   contentEl, filenameEl, tabs,
   setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, setGradientBold,
-  showWelcomeOnStartup, setShowWelcomeOnStartup,
+  showWelcomeOnStartup, setShowWelcomeOnStartup, setFullWidth,
 } from "./state.js";
 import { loadSettings, saveSettings, applyGradientBold, applyFullWidth } from "./settings.js";
 import { getApi } from "./api.js";
@@ -43,6 +43,7 @@ window.__applySettings = function (dataStr) {
       applyGradientBold(false);
     }
     if (settings && settings.fullWidth === "true") {
+      setFullWidth(true);
       applyFullWidth(true);
     }
   } catch (e) {}
@@ -54,7 +55,7 @@ window.__applySettings = function (dataStr) {
     const s = loadSettings();
     if (s.docFontSize) setDocFontSize(Number(s.docFontSize));
     if (s.gradientBold === false) applyGradientBold(false);
-    if (s.fullWidth === true) applyFullWidth(true);
+    if (s.fullWidth === true) { setFullWidth(true); applyFullWidth(true); }
   } catch (e) {}
 })();
 
@@ -64,6 +65,10 @@ window.__applySettings = function (dataStr) {
 function renderWelcomeContent(data) {
   setWelcomeContent(data.content);
   if (tabs.length > 0) return;
+  if (typeof marked === "undefined" || typeof marked.parse !== "function") {
+    showFallbackContent();
+    return;
+  }
   contentEl.className = "content";
   contentEl.innerHTML =
     '<div class="rendered">' + marked.parse(data.content) + "</div>";
