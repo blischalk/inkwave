@@ -8,8 +8,10 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Prefer Edge (WebView2) on Windows to avoid WinForms/pythonnet errors.
@@ -366,6 +368,7 @@ class Api:
     def __init__(self, window):
         self._window = window  # use private name so it's less likely to be introspected
         self._doom_proc = None
+        self._settings_lock = threading.Lock()  # guards read-modify-write in save_setting
 
     def open_file(self):
         """Pick a markdown file; returns root (parent dir), path, content (or error)."""
@@ -636,12 +639,14 @@ class Api:
         try:
             if sys.platform == "darwin":
                 from AppKit import NSWorkspace
-                NSWorkspace.sharedWorkspace().openFile_(path)
+                if not NSWorkspace.sharedWorkspace().openFile_(path):
+                    return {"error": "No application available to open this file."}
             elif os.name == "nt":
                 os.startfile(path)  # noqa: not shell execution
             else:
                 import webbrowser
-                webbrowser.open("file://" + path)
+                if not webbrowser.open("file://" + urllib.parse.quote(path)):
+                    return {"error": "Could not open file in default application."}
             return {"success": True}
         except Exception as e:
             return {"error": str(e)}
@@ -656,36 +661,63 @@ class Api:
 
     def load_settings(self):
         """Load all persisted settings. Returns a dict (empty if none saved)."""
+        with self._settings_lock:
+            try:
+                with open(self._settings_path(), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    logger.debug("load_settings: %d keys", len(data))
+                    return data
+            except Exception:
+                return {}
+
+    @staticmethod
+    def _atomic_write_json(path, data):
+        """Write `data` as JSON to `path` atomically.
+
+        Writes to a temp file in the same directory, then os.replace()'s it
+        over the target — atomic on both POSIX and modern Windows. Prevents
+        the plain open(path, "w") truncate-then-write pattern from leaving
+        an empty or partially-written file (and losing every previously
+        saved setting) if the process dies mid-write."""
+        dir_name = os.path.dirname(path) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
         try:
-            with open(self._settings_path(), "r", encoding="utf-8") as f:
-                data = json.load(f)
-                logger.debug("load_settings: %d keys", len(data))
-                return data
-        except Exception:
-            return {}
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def save_setting(self, key, value):
         """Persist a single setting by key."""
         logger.debug("save_setting: %s", key)
-        try:
-            path = self._settings_path()
+        with self._settings_lock:
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                data = {}
-            data[key] = value
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f)
-            return {"ok": True}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+                path = self._settings_path()
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = {}
+                data[key] = value
+                self._atomic_write_json(path, data)
+                return {"ok": True}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
 
     # ── Multi-provider API key management ────────────────────────────────────
 
     def _set_key_flag(self, provider, has_key):
-        """Write {provider}_key_set flag to settings file so status checks never touch keychain."""
-        try:
+        """Write {provider}_key_set flag to settings file so status checks never touch keychain.
+
+        Raises on write failure so callers can report the error rather than
+        silently leaving the flag out of sync with the keyring.
+        """
+        with self._settings_lock:
             path = self._settings_path()
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -693,10 +725,7 @@ class Api:
             except Exception:
                 data = {}
             data[f"{provider}_key_set"] = has_key
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f)
-        except Exception:
-            pass
+            self._atomic_write_json(path, data)
 
     def save_provider_api_key(self, provider, key):
         """Store an API key for a given provider in OS keychain. Returns {ok: bool, error?}."""
@@ -974,6 +1003,10 @@ def main():
             pass
 
     _pending_open_paths = []
+    _pending_open_paths_lock = threading.Lock()  # guards concurrent access from
+    # the Cocoa AppDelegate callback thread (_app_openFile/_app_openFiles),
+    # the _watch_open_queue background thread, and inject_open_file (the
+    # pywebview main thread's window.events.loaded callback).
 
     def _open_md_in_window(path):
         """Read a .md file and send it to the JS frontend to open in a new tab."""
@@ -1001,9 +1034,11 @@ def main():
                     _open_md_in_window(arg)
                     break
             # Process any paths queued by the delegate before the window loaded
-            for p in _pending_open_paths:
+            with _pending_open_paths_lock:
+                queued = list(_pending_open_paths)
+                _pending_open_paths.clear()
+            for p in queued:
                 _open_md_in_window(p)
-            _pending_open_paths.clear()
         except Exception:
             pass
 
@@ -1013,12 +1048,14 @@ def main():
             from webview.platforms.cocoa import BrowserView
 
             def _app_openFile(self, app, filename):
-                _pending_open_paths.append(str(filename))
+                with _pending_open_paths_lock:
+                    _pending_open_paths.append(str(filename))
                 return True
 
             def _app_openFiles(self, app, filenames):
-                for f in filenames:
-                    _pending_open_paths.append(str(f))
+                with _pending_open_paths_lock:
+                    for f in filenames:
+                        _pending_open_paths.append(str(f))
 
             BrowserView.AppDelegate.application_openFile_ = _app_openFile
             BrowserView.AppDelegate.application_openFiles_ = _app_openFiles
@@ -1028,8 +1065,10 @@ def main():
                 import time
                 while True:
                     time.sleep(0.3)
-                    while _pending_open_paths:
-                        p = _pending_open_paths.pop(0)
+                    with _pending_open_paths_lock:
+                        queued = list(_pending_open_paths)
+                        _pending_open_paths.clear()
+                    for p in queued:
                         _open_md_in_window(p)
 
             threading.Thread(target=_watch_open_queue, daemon=True).start()
