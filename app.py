@@ -1054,8 +1054,13 @@ def main():
             "installMenuItems:", None, False)
 
     try:
-        window.events.loaded += inject_welcome
+        # inject_settings MUST run before inject_welcome: __applyWelcome
+        # checks the showWelcomeOnStartup state that only __applySettings
+        # sets. Reversed order meant the welcome screen always rendered
+        # regardless of the saved setting, since __applySettings hadn't
+        # run yet when __applyWelcome made its decision.
         window.events.loaded += inject_settings
+        window.events.loaded += inject_welcome
         window.events.loaded += inject_open_file
         window.events.loaded += inject_edit_menu
     except Exception:

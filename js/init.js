@@ -46,7 +46,17 @@ window.__applySettings = function (dataStr) {
       setFullWidth(true);
       applyFullWidth(true);
     }
-  } catch (e) {}
+    if (settings && settings.showWelcomeOnStartup === "false") {
+      setShowWelcomeOnStartup(false);
+      const toggle = document.getElementById("showWelcomeToggle");
+      if (toggle) {
+        toggle.checked = false;
+        toggle.setAttribute("aria-checked", "false");
+      }
+    }
+  } catch (e) {
+    console.error("__applySettings: failed to apply settings:", e);
+  }
 };
 
 // Restore appearance settings from localStorage (for non-Python-injected settings path)
@@ -152,11 +162,11 @@ export function loadWelcome() {
     return;
   }
   let done = false;
-  function finish(data) {
+  function finish(data, showWelcome) {
     if (done) return;
     done = true;
     if (data && data.content) {
-      if (!showWelcomeOnStartup) {
+      if (!showWelcome) {
         showFallbackContent();
         return;
       }
@@ -165,15 +175,35 @@ export function loadWelcome() {
       showFallbackContent();
     }
   }
-  const timeoutId = setTimeout(() => { finish(null); }, 2500);
-  a.get_welcome()
-    .then((data) => {
+  const timeoutId = setTimeout(() => { finish(null, showWelcomeOnStartup); }, 2500);
+  // settings.json (via a.load_settings()) is the authoritative,
+  // cross-launch source of truth for showWelcomeOnStartup — localStorage
+  // (which seeded the showWelcomeOnStartup module variable via
+  // initSettings()) is a secondary cache that can be stale or empty on
+  // a fresh WebKit storage profile (e.g. a freshly built dev app) even
+  // when settings.json already has the real persisted value. Fetch both
+  // in parallel and prefer the Python value when the call succeeds.
+  const settingsPromise =
+    typeof a.load_settings === "function"
+      ? a.load_settings().catch(() => null)
+      : Promise.resolve(null);
+  Promise.all([a.get_welcome().catch(() => null), settingsPromise])
+    .then(([data, settings]) => {
       clearTimeout(timeoutId);
-      finish(data);
-    })
-    .catch(() => {
-      clearTimeout(timeoutId);
-      finish(null);
+      if (settings && settings.showWelcomeOnStartup === "false" && showWelcomeOnStartup) {
+        // settings.json disagrees with the localStorage-seeded module
+        // state (e.g. fresh WebKit storage profile with no prior
+        // localStorage write but an existing Python-persisted value).
+        // Sync both the module state and the Settings panel checkbox so
+        // the UI doesn't contradict what's about to render.
+        setShowWelcomeOnStartup(false);
+        const toggle = document.getElementById("showWelcomeToggle");
+        if (toggle) {
+          toggle.checked = false;
+          toggle.setAttribute("aria-checked", "false");
+        }
+      }
+      finish(data, showWelcomeOnStartup);
     });
 }
 
