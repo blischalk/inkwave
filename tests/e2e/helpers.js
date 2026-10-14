@@ -76,6 +76,19 @@ async function readDraftsRegistry(page) {
 }
 
 /**
+ * Reads back the content most recently written to `path` via
+ * write_file() — covers ANY file (a regular file opened via
+ * open_file, not just scratch files tracked in the drafts registry).
+ * Returns undefined if write_file was never called for that path.
+ */
+async function readWrittenFile(page, path) {
+  return page.evaluate(
+    (p) => (window.__inkwaveTestWrittenFiles || {})[p],
+    path,
+  );
+}
+
+/**
  * Simulates quitting and relaunching Inkwave within the SAME Playwright
  * page: snapshots the current in-memory drafts registry, reloads
  * index.html fresh (new module graph, empty `tabs` array, exactly like
@@ -94,4 +107,26 @@ async function simulateRelaunch(page) {
   await page.reload();
 }
 
-export { gotoApp, simulatePythonPush, readPersistedSettings, readDraftsRegistry, simulateRelaunch };
+/**
+ * Configure a mock API override for open_file/open_folder/list_dir/
+ * read_file/list_ollama_models — simulated native-dialog or
+ * backend-call results for a specific test (default behavior for all
+ * of these is "user cancelled" / "empty", see mock-pywebview.js).
+ * Must be called AFTER gotoApp() (needs window to exist).
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {string} apiMethod - one of open_file, open_folder, list_dir,
+ *   read_file, list_ollama_models
+ * @param {*} returnValue - JSON-serializable value the mock should resolve with
+ */
+async function setMockOverride(page, apiMethod, returnValue) {
+  await page.evaluate(
+    ({ apiMethod, returnValue }) => {
+      window.__inkwaveMockApiOverrides = window.__inkwaveMockApiOverrides || {};
+      window.__inkwaveMockApiOverrides[apiMethod] = () => returnValue;
+    },
+    { apiMethod, returnValue },
+  );
+}
+
+export { gotoApp, simulatePythonPush, readPersistedSettings, readDraftsRegistry, readWrittenFile, simulateRelaunch, setMockOverride };

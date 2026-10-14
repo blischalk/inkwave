@@ -70,6 +70,15 @@ export function installMockPywebviewApi({ initialSettings, welcomeContent, initi
         return Promise.resolve({ ok: true });
       },
       write_file(path, content) {
+        const override = window.__inkwaveMockApiOverrides && window.__inkwaveMockApiOverrides.write_file;
+        if (override) return Promise.resolve(override(path, content));
+        // General-purpose write tracking for ANY file (scratch or a
+        // regular file opened via open_file) — readWrittenFile() in
+        // helpers.js reads this. Scratch files additionally stay
+        // mirrored into __inkwaveTestDraftsRegistry so
+        // reloadScratchFiles()/list_scratch_files() keep working.
+        window.__inkwaveTestWrittenFiles = window.__inkwaveTestWrittenFiles || {};
+        window.__inkwaveTestWrittenFiles[path] = content;
         if (Object.prototype.hasOwnProperty.call(window.__inkwaveTestDraftsRegistry, path)) {
           window.__inkwaveTestDraftsRegistry[path] = content;
         }
