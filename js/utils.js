@@ -32,20 +32,19 @@ export function resolveMermaidTheme() {
 
 let _mermaidLoadPromise = null;
 
-async function loadMermaid() {
-  try {
-    const mod = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
-    return mod.default;
-  } catch (_) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "vendor/mermaid.min.js";
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-    return window.mermaid;
-  }
+// Offline-only: mermaid is vendored in-repo (vendor/mermaid.min.js), a
+// UMD/IIFE bundle that sets globalThis.mermaid on load. No network
+// request of any kind is attempted — see .kiro goal: zero outbound calls.
+export async function loadMermaid() {
+  if (window.mermaid) return window.mermaid;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "vendor/mermaid.min.js";
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return window.mermaid;
 }
 
 function ensureMermaid() {

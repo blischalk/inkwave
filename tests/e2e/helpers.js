@@ -16,14 +16,17 @@ import { installMockPywebviewApi } from "./fixtures/mock-pywebview.js";
  *   simulate a missing/unreadable welcome file.
  */
 async function gotoApp(page, { initialSettings = {}, welcomeContent = "# Welcome\n\nHello." } = {}) {
-  // index.html loads marked/highlight.js from CDNs with an onerror
-  // fallback to vendor/*.min.js. Tests must be hermetic and never depend
-  // on live network, so force the fallback path deterministically
-  // instead of letting real CDN requests race the test (flaky under
-  // parallel load, and makes test runs secretly dependent on uptime of
-  // cdnjs.cloudflare.com / cdn.jsdelivr.net).
-  await page.route("https://cdnjs.cloudflare.com/**", (route) => route.abort());
-  await page.route("https://cdn.jsdelivr.net/**", (route) => route.abort());
+  // Regression guard: index.html/js/utils.js must make ZERO outbound
+  // network requests (fonts, marked, highlight.js, mermaid are all
+  // vendored in vendor/). If any request escapes to a non-local host,
+  // fail loudly instead of silently falling back — a silent CDN
+  // fallback is exactly the bug this assertion exists to catch.
+  page.on("request", (req) => {
+    const url = req.url();
+    if (!url.startsWith("http://localhost") && !url.startsWith("http://127.0.0.1") && !url.startsWith("file:")) {
+      throw new Error(`Outbound network request detected (must be zero): ${url}`);
+    }
+  });
   await page.addInitScript(installMockPywebviewApi, { initialSettings, welcomeContent });
   await page.goto("/index.html");
 }
