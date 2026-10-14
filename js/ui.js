@@ -14,6 +14,7 @@ import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
 import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tabs.js";
 import { initTree, openFile, selectFile, createInFolder, refreshFolder } from "./filetree.js";
+import { createScratchTab } from "./scratch.js";
 import { saveToFile, saveOrSaveAs, flushActiveEditAndSave, undoTab, redoTab } from "./fileio.js";
 import { applyLinkToSelection } from "./editor.js";
 import { getBlocks, blocksToContent } from "./blocks.js";
@@ -623,6 +624,7 @@ window.__redoEdit = applyRedo;
 // ── Global keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "p") { e.preventDefault(); exportPdf(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === "n") { e.preventDefault(); createScratchTab(); return; }
   if (isPickerOpen()) {
     if (e.key === "ArrowDown") {
       e.preventDefault();

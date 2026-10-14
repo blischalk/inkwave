@@ -1,8 +1,42 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { pushUndo, undoTab, redoTab } from "../../js/fileio.js";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// fileio.js imports renderTabBar from tabs.js, which reads real
+// index.html element IDs (tabBarEl) at module-eval time with no null
+// guards — same bootstrap pattern as welcome-dismiss.test.js /
+// scratch.test.js. Static `import` of fileio.js/tabs.js/state.js is
+// hoisted above this file's own top-level code regardless of where the
+// import line is textually written, so the DOM MUST be built via
+// dynamic import() below, not a static import, or tabBarEl resolves to
+// null before document.body.innerHTML is ever set.
+const indexHtmlPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../index.html",
+);
+const indexHtml = readFileSync(indexHtmlPath, "utf8");
+const bodyMatch = indexHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+document.body.innerHTML = bodyMatch ? bodyMatch[1] : "";
+
+const { pushUndo, undoTab, redoTab, saveOrSaveAs } = await import("../../js/fileio.js");
+const { setActiveTabId } = await import("../../js/state.js");
+const { getActiveTab, addTab } = await import("../../js/tabs.js");
 
 function makeTab(content) {
   return { content, path: "/fake/file.md" };
+}
+
+function installMockApi(overrides = {}) {
+  window.pywebview = {
+    api: {
+      write_file: vi.fn().mockResolvedValue({}),
+      save_as: vi.fn().mockResolvedValue({ path: "/notes/renamed.md" }),
+      forget_scratch_file: vi.fn().mockResolvedValue({ ok: true }),
+      delete_file: vi.fn().mockResolvedValue({ ok: true }),
+      ...overrides,
+    },
+  };
 }
 
 // ── pushUndo ──────────────────────────────────────────────────────────────────
@@ -138,5 +172,131 @@ describe("redoTab", () => {
     undoTab(tab);
     redoTab(tab);
     expect(tab.content).toBe("edited");
+  });
+});
+
+// ── saveOrSaveAs ──────────────────────────────────────────────────────────────
+// Covers the B3 Boyscout fix (discovered during scratch-file plan pushback):
+// saveOrSaveAs() reassigns tab.id to the new path on Save As, but activeTabId
+// lives separately in state.js. Without updating it in the same breath, the
+// very next getActiveTab() call returns null because it's still matching
+// against the OLD id.
+
+describe("saveOrSaveAs", () => {
+  beforeEach(() => {
+    window.pywebview = undefined;
+  });
+
+  it("does nothing when tab is null/undefined", () => {
+    expect(() => saveOrSaveAs(null)).not.toThrow();
+  });
+
+  it("calls write_file directly when the tab already has a path", async () => {
+    const writeFn = vi.fn().mockResolvedValue({});
+    installMockApi({ write_file: writeFn });
+    const tab = addTab({ path: "/notes/existing.md", title: "existing.md", content: "hi" });
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writeFn).toHaveBeenCalledWith("/notes/existing.md", "hi");
+  });
+
+  it("does NOT call write_file directly for a scratch tab even though it has a path — goes through save_as instead", async () => {
+    const writeFn = vi.fn().mockResolvedValue({});
+    installMockApi({ write_file: writeFn });
+    const tab = addTab({ path: "/drafts/Untitled.md", title: "Untitled.md", content: "a note" });
+    tab._isScratch = true;
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    // write_file DOES still get called, but only via saveToFile() inside
+    // the save_as .then() callback (after the dialog "resolves"), not
+    // as the first, direct action — proven by save_as having been
+    // invoked at all.
+    expect(window.pywebview.api.save_as).toHaveBeenCalled();
+  });
+
+  it("does nothing (no crash) when API is unavailable and tab has no path", () => {
+    const tab = addTab({ path: null, title: "Untitled.md", content: "" });
+    expect(() => saveOrSaveAs(tab)).not.toThrow();
+  });
+
+  it("Save As on the ACTIVE tab updates activeTabId to the new path (B3 fix)", async () => {
+    installMockApi();
+    const tab = addTab({ path: null, title: "Untitled.md", content: "hello" });
+    setActiveTabId(tab.id); // simulate this tab being the active one
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(tab.path).toBe("/notes/renamed.md");
+    expect(tab.id).toBe("/notes/renamed.md");
+    // The actual regression this test exists to catch: getActiveTab()
+    // must find THIS tab under its NEW id, not return null.
+    const active = getActiveTab();
+    expect(active).not.toBeNull();
+    expect(active.id).toBe("/notes/renamed.md");
+  });
+
+  it("Save As on a BACKGROUND (non-active) tab does NOT touch activeTabId", async () => {
+    installMockApi();
+    const activeTab = addTab({ path: "/notes/other.md", title: "other.md", content: "x" });
+    const bgTab = addTab({ path: null, title: "Untitled.md", content: "bg content" });
+    // addTab() made bgTab active; explicitly make the OTHER tab active instead
+    // to simulate saving a tab that is not currently focused.
+    setActiveTabId(activeTab.id);
+    saveOrSaveAs(bgTab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(bgTab.path).toBe("/notes/renamed.md");
+    // Active tab must remain the one the user is actually looking at.
+    const active = getActiveTab();
+    expect(active.id).toBe(activeTab.id);
+  });
+
+  it("forgets and deletes the old scratch file when saving a scratch tab via Save As", async () => {
+    const forgetFn = vi.fn().mockResolvedValue({ ok: true });
+    const deleteFn = vi.fn().mockResolvedValue({ ok: true });
+    installMockApi({ forget_scratch_file: forgetFn, delete_file: deleteFn });
+    const tab = addTab({ path: "/drafts/Untitled.md", title: "Untitled.md", content: "scratch note" });
+    tab._isScratch = true;
+    setActiveTabId(tab.id);
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(forgetFn).toHaveBeenCalledWith("/drafts/Untitled.md");
+    expect(deleteFn).toHaveBeenCalledWith("/drafts/Untitled.md");
+    expect(tab._isScratch).toBe(false);
+  });
+
+  it("does not call forget/delete for a non-scratch tab's Save As", async () => {
+    const forgetFn = vi.fn().mockResolvedValue({ ok: true });
+    const deleteFn = vi.fn().mockResolvedValue({ ok: true });
+    installMockApi({ forget_scratch_file: forgetFn, delete_file: deleteFn });
+    const tab = addTab({ path: null, title: "Untitled.md", content: "normal" });
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(forgetFn).not.toHaveBeenCalled();
+    expect(deleteFn).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and does not update the tab when save_as resolves with no path", async () => {
+    installMockApi({ save_as: vi.fn().mockResolvedValue({}) });
+    const tab = addTab({ path: null, title: "Untitled.md", content: "x" });
+    const originalId = tab.id;
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(tab.id).toBe(originalId);
+    expect(tab.path).toBeNull();
+  });
+
+  it("shows an error without throwing when save_as rejects", async () => {
+    installMockApi({ save_as: vi.fn().mockRejectedValue(new Error("cancelled")) });
+    const tab = addTab({ path: null, title: "Untitled.md", content: "x" });
+    expect(() => saveOrSaveAs(tab)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it("does nothing when API is unavailable for a pathless tab (no save_as to call)", async () => {
+    window.pywebview = undefined;
+    const tab = addTab({ path: null, title: "Untitled.md", content: "x" });
+    const originalId = tab.id;
+    saveOrSaveAs(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(tab.id).toBe(originalId);
   });
 });

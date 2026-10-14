@@ -15,7 +15,7 @@ import { installMockPywebviewApi } from "./fixtures/mock-pywebview.js";
  * @param {string|null} welcomeContent - Welcome.md body, or null to
  *   simulate a missing/unreadable welcome file.
  */
-async function gotoApp(page, { initialSettings = {}, welcomeContent = "# Welcome\n\nHello." } = {}) {
+async function gotoApp(page, { initialSettings = {}, welcomeContent = "# Welcome\n\nHello.", initialDrafts = {} } = {}) {
   // Regression guard: index.html/js/utils.js must make ZERO outbound
   // network requests (fonts, marked, highlight.js, mermaid are all
   // vendored in vendor/). If any request escapes to a non-local host,
@@ -27,7 +27,7 @@ async function gotoApp(page, { initialSettings = {}, welcomeContent = "# Welcome
       throw new Error(`Outbound network request detected (must be zero): ${url}`);
     }
   });
-  await page.addInitScript(installMockPywebviewApi, { initialSettings, welcomeContent });
+  await page.addInitScript(installMockPywebviewApi, { initialSettings, welcomeContent, initialDrafts });
   await page.goto("/index.html");
 }
 
@@ -66,4 +66,32 @@ async function readPersistedSettings(page) {
   return page.evaluate(() => ({ ...window.__inkwaveTestSettingsStore }));
 }
 
-export { gotoApp, simulatePythonPush, readPersistedSettings };
+/**
+ * Reads back the in-memory mock drafts registry (path -> content),
+ * simulating what a real relaunch would read from drafts.json + the
+ * drafts directory on disk.
+ */
+async function readDraftsRegistry(page) {
+  return page.evaluate(() => ({ ...window.__inkwaveTestDraftsRegistry }));
+}
+
+/**
+ * Simulates quitting and relaunching Inkwave within the SAME Playwright
+ * page: snapshots the current in-memory drafts registry, reloads
+ * index.html fresh (new module graph, empty `tabs` array, exactly like
+ * a real process restart), and re-installs the mock API seeded with
+ * that snapshot so reloadScratchFiles() has something real to reopen.
+ * Settings are carried forward the same way.
+ */
+async function simulateRelaunch(page) {
+  const drafts = await readDraftsRegistry(page);
+  const settings = await readPersistedSettings(page);
+  await page.addInitScript(installMockPywebviewApi, {
+    initialSettings: settings,
+    welcomeContent: "# Welcome\n\nHello.",
+    initialDrafts: drafts,
+  });
+  await page.reload();
+}
+
+export { gotoApp, simulatePythonPush, readPersistedSettings, readDraftsRegistry, simulateRelaunch };

@@ -1,7 +1,7 @@
 import {
   tabs, activeTabId, setActiveTabId,
   tabBarEl,
-  onShowTabContent, onShowWelcomeOrEmpty,
+  onShowTabContent, onShowWelcomeOrEmpty, onBeforeCloseTab,
   primaryTabId, secondaryTabId, splitMode,
   setPrimaryTabId, setSecondaryTabId,
   activePane,
@@ -43,6 +43,7 @@ export function closeTab(id, e) {
   if (e) e.stopPropagation();
   const idx = tabs.findIndex((t) => t.id === id);
   if (idx === -1) return;
+  if (onBeforeCloseTab) onBeforeCloseTab(tabs[idx]);
   tabs.splice(idx, 1);
   if (id === secondaryTabId) setSecondaryTabId(null);
   if (activeTabId === id) {

@@ -9,6 +9,7 @@ import { highlightCodeInContainer } from "./utils.js";
 import { applyTheme } from "./ui.js";
 import { addTab } from "./tabs.js";
 import { initTree, selectFile } from "./filetree.js";
+import { reloadScratchFiles } from "./scratch.js";
 
 // ── window.__applySettings ────────────────────────────────────────────────────
 // Called by Python before/after loading settings from disk.
@@ -150,12 +151,29 @@ setTimeout(() => {
 
 // ── Welcome screen loading ────────────────────────────────────────────────────
 function showFallbackContent() {
+  // Boyscout fix (discovered during scratch-file plan implementation):
+  // this used to unconditionally overwrite contentEl, even when a tab
+  // (e.g. a scratch file restored by reloadScratchFiles()) was already
+  // open and rendered. renderWelcomeContent() already had this exact
+  // guard; showFallbackContent() is the sibling "nothing to show"
+  // branch and needs the identical guard for the same reason — don't
+  // stomp over real content that's already on screen.
+  if (tabs.length > 0) return;
   contentEl.className = "content empty";
   contentEl.innerHTML =
     "Open a file or folder to view markdown files. Only folders and .md files are shown in the tree.";
 }
 
 export function loadWelcome() {
+  // Reopen any scratch tabs left over from the previous session FIRST
+  // and await it before deciding whether to render the welcome screen.
+  // renderWelcomeContent() bails early once tabs.length > 0, so without
+  // this ordering a dirty, unsaved scratch note could flash behind (or
+  // lose visibility under) the welcome screen on launch.
+  reloadScratchFiles().then(() => _loadWelcomeAfterScratchReload());
+}
+
+function _loadWelcomeAfterScratchReload() {
   const a = getApi();
   if (!a || typeof a.get_welcome !== "function") {
     showFallbackContent();

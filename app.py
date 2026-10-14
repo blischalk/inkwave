@@ -482,6 +482,84 @@ class Api:
         except Exception as e:
             return {"path": path, "content": None, "error": str(e)}
 
+    def _drafts_dir(self):
+        """Return the per-OS drafts subdirectory, creating it if missing."""
+        base = _user_data_dir(_app_name()) if getattr(sys, 'frozen', False) else BASE_DIR
+        path = os.path.join(base, "drafts")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _drafts_registry_path(self):
+        """Return the path to drafts.json inside the drafts directory."""
+        return os.path.join(self._drafts_dir(), "drafts.json")
+
+    def _load_drafts_registry(self):
+        """Load the drafts registry. Returns a list of {"path": str} dicts,
+        falling back to an empty list on any missing/corrupt file so launch
+        never crashes on a bad registry."""
+        try:
+            with open(self._drafts_registry_path(), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+                return []
+        except Exception:
+            return []
+
+    def _save_drafts_registry(self, entries):
+        """Persist the drafts registry atomically."""
+        try:
+            self._atomic_write_json(self._drafts_registry_path(), entries)
+        except Exception as e:
+            logger.debug("failed to save drafts registry: %s", e)
+
+    def create_scratch_file(self):
+        """Create a new Untitled N.md scratch file under the drafts dir and
+        register it in drafts.json. Returns { path, content } on success,
+        or { path: None, content: None, error } on failure. Delegates
+        filename collision avoidance and the actual write to create_file."""
+        result = self.create_file(self._drafts_dir(), "Untitled.md")
+        if result.get("error"):
+            return result
+        entries = self._load_drafts_registry()
+        entries.append({"path": result["path"]})
+        self._save_drafts_registry(entries)
+        return result
+
+    def list_scratch_files(self):
+        """Return every registered scratch file that still exists on disk,
+        with its content inlined so JS doesn't need a second read per
+        entry. Returns { files: [{ path, content }] }. Entries whose file
+        was deleted out-of-band are dropped from the registry (self-healing,
+        same tolerance-of-drift behavior as load_settings)."""
+        entries = self._load_drafts_registry()
+        files = []
+        kept_entries = []
+        for entry in entries:
+            path = entry.get("path") if isinstance(entry, dict) else None
+            if not path or not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                continue
+            files.append({"path": path, "content": content})
+            kept_entries.append({"path": path})
+        if len(kept_entries) != len(entries):
+            self._save_drafts_registry(kept_entries)
+        return {"files": files}
+
+    def forget_scratch_file(self, path):
+        """Remove `path` from the drafts registry. Idempotent: always
+        returns a success dict, even if the path was never registered."""
+        entries = self._load_drafts_registry()
+        filtered = [e for e in entries if not (isinstance(e, dict) and e.get("path") == path)]
+        if len(filtered) != len(entries):
+            self._save_drafts_registry(filtered)
+        return {"ok": True}
+
+
     def save_image(self, md_file_path, filename, base64_content):
         """Save an image file next to the given markdown file. Returns { path, name } or { error }."""
         if not md_file_path or not os.path.isfile(md_file_path):
@@ -864,6 +942,54 @@ class Api:
             pass
 
 
+def check_unsaved_scratch_on_quit(window):
+    """window.events.closing handler, called with the live pywebview Window.
+
+    Verified against the installed pywebview 6.2 on cocoa (macOS):
+    events.closing is registered with Event(window, True), i.e.
+    should_lock=True, so this handler and its evaluate_js call both
+    execute synchronously on the calling thread BEFORE should_close()
+    returns to AppKit. See
+    venv/lib/python3.12/site-packages/webview/event.py (Event.set) and
+    venv/lib/python3.12/site-packages/webview/platforms/cocoa.py
+    (BrowserView.should_close), confirmed during Phase A implementation
+    (verified live via a direct Event() unit test, not source reading
+    alone).
+
+    Calling evaluate_js(script) with no callback blocks and returns the
+    JS value synchronously per window.py's own docstring on evaluate_js
+    ("the result is returned to the caller"). This makes the primary
+    (non-fallback) design from the golden plan viable: no need for the
+    plan's documented degraded fallback (always allow quit, rely solely
+    on reload-on-launch).
+
+    Returning False from a closing handler cancels the close
+    (should_cancel=True in cocoa.py's should_close); returning anything
+    else (including None) allows it.
+
+    Extracted to module level (rather than a main()-local closure, like
+    the sibling inject_welcome/inject_settings callbacks) specifically so
+    it is directly unit-testable with a mocked window — see
+    tests/python/test_scratch_files.py::TestCheckUnsavedScratchOnQuit.
+    """
+    try:
+        has_unsaved = window.evaluate_js(
+            "window.__hasUnsavedScratchTabs ? window.__hasUnsavedScratchTabs() : false"
+        )
+    except Exception as e:
+        logger.debug("check_unsaved_scratch_on_quit: evaluate_js failed, allowing quit: %s", e)
+        return None
+    if not has_unsaved:
+        return None
+    proceed = window.create_confirmation_dialog(
+        "Unsaved scratch notes",
+        "You have scratch notes that haven't been saved to a file yet. "
+        "Quit anyway? Your scratch notes will be reloaded next time you "
+        "open Inkwave.",
+    )
+    return None if proceed else False
+
+
 def main():
     if os.name == "nt":
         sys.stderr = StderrFilter(sys.__stderr__)
@@ -1065,6 +1191,11 @@ def main():
         window.events.loaded += inject_edit_menu
     except Exception:
         pass
+
+    try:
+        window.events.closing += (lambda: check_unsaved_scratch_on_quit(window))
+    except Exception as e:
+        logger.warning("Failed to register window.events.closing callback: %s", e)
 
     # Persist window geometry on resize/move (debounced)
     _geo_timer = None
