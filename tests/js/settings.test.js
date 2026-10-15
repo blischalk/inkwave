@@ -87,6 +87,51 @@ describe("settings — loadSettings / saveSettings", () => {
     const s = loadSettings();
     expect(typeof s).toBe("object");
   });
+
+  it("saveSettings logs an error when save_setting resolves ok:false", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const originalSaveSetting = window.pywebview.api.save_setting;
+    window.pywebview.api.save_setting = () =>
+      Promise.resolve({ ok: false, error: "disk full" });
+    try {
+      saveSettings({ theme: "obsidianite" });
+      // Flush the microtask queue so the .then() callback runs.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errorSpy).toHaveBeenCalled();
+      expect(errorSpy.mock.calls[0][0]).toContain("theme");
+    } finally {
+      window.pywebview.api.save_setting = originalSaveSetting;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("saveSettings logs an error when save_setting rejects", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const originalSaveSetting = window.pywebview.api.save_setting;
+    window.pywebview.api.save_setting = () => Promise.reject(new Error("network down"));
+    try {
+      saveSettings({ theme: "lavender" });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      window.pywebview.api.save_setting = originalSaveSetting;
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("saveSettings does not log an error when save_setting resolves ok:true", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      saveSettings({ theme: "obsidianite" });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 describe("settings — PROVIDER_MODELS", () => {

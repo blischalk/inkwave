@@ -227,6 +227,63 @@ class TestSaveImage:
         assert "(" not in result["name"]
 
 
+# ── _settings_path (real branch logic, NOT via the api fixture's monkeypatch) ─
+
+class TestSettingsPath:
+    """Tests Api._settings_path()'s own frozen/dev branch logic directly.
+
+    Deliberately does NOT use the `api` fixture, which replaces
+    _settings_path with a lambda and would bypass the exact logic under
+    test here (see golden plan Worry 5)."""
+
+    def test_not_frozen_uses_base_dir(self, monkeypatch):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", False, raising=False)
+        path = a._settings_path()
+        assert path == os.path.join(app.BASE_DIR, "settings.json")
+
+    def test_frozen_production_uses_user_data_dir_inkwave(self, monkeypatch, tmp_path):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))  # no _devbuild marker here
+        path = a._settings_path()
+        assert "Inkwave" in path
+        assert "Inkwave-Dev" not in path
+        assert path.endswith("settings.json")
+
+    def test_frozen_dev_build_uses_user_data_dir_inkwave_dev(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        path = a._settings_path()
+        assert "Inkwave-Dev" in path
+
+    def test_frozen_creates_directory_if_missing(self, monkeypatch, tmp_path):
+        fresh_base = tmp_path / "fresh"
+        fresh_base.mkdir()
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "_user_data_dir",
+                            lambda app_name="Inkwave": str(tmp_path / "newly_created_dir"))
+        a._settings_path()
+        assert (tmp_path / "newly_created_dir").is_dir()
+
+    def test_frozen_prod_and_dev_resolve_to_different_paths(self, monkeypatch, tmp_path):
+        window = MagicMock()
+        a = Api(window)
+        monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        prod_path = a._settings_path()
+        (tmp_path / "_devbuild").write_text("")
+        dev_path = a._settings_path()
+        assert prod_path != dev_path
+
+
 # ── load_settings / save_setting ─────────────────────────────────────────────
 
 class TestSettings:
@@ -477,7 +534,6 @@ class TestSetKeyFlagRaisesOnFailure:
     def test_succeeds_normally_when_settings_path_is_writable(self, api):
         api._set_key_flag("openai", True)
         assert api.load_settings().get("openai_key_set") is True
-
 
 # ── get_provider_api_key_status ───────────────────────────────────────────────
 

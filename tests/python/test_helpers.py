@@ -7,6 +7,8 @@ import app
 from app import (
     _build_system_prompt,
     _user_data_dir,
+    _is_dev_build,
+    _app_name,
     _filter_pywebview_errors,
     _list_dir_md_only,
 )
@@ -88,6 +90,86 @@ class TestUserDataDir:
         monkeypatch.setattr(os, "name", "posix")
         path = _user_data_dir()
         assert ".inkwave" in path
+
+    def test_custom_app_name_darwin(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "darwin")
+        path = _user_data_dir("Inkwave-Dev")
+        assert "Library" in path
+        assert "Application Support" in path
+        assert "Inkwave-Dev" in path
+        assert path.endswith("Inkwave-Dev")
+
+    def test_custom_app_name_windows(self, monkeypatch):
+        monkeypatch.setattr(os, "name", "nt")
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setenv("APPDATA", "C:\\Users\\test\\AppData\\Roaming")
+        path = _user_data_dir("Inkwave-Dev")
+        assert "Inkwave-Dev" in path
+        assert "Inkwave" not in path.replace("Inkwave-Dev", "")
+
+    def test_custom_app_name_linux(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(os, "name", "posix")
+        path = _user_data_dir("Inkwave-Dev")
+        assert ".inkwave-dev" in path
+
+    def test_default_and_custom_produce_different_paths(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "darwin")
+        default_path = _user_data_dir()
+        dev_path = _user_data_dir("Inkwave-Dev")
+        assert default_path != dev_path
+
+    def test_empty_app_name_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _user_data_dir("")
+
+    def test_app_name_with_path_separator_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _user_data_dir("foo/bar")
+
+    def test_app_name_with_parent_dir_traversal_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _user_data_dir("../../etc")
+
+    def test_app_name_with_embedded_traversal_raises_value_error(self):
+        with pytest.raises(ValueError):
+            _user_data_dir("Inkwave/../../etc")
+
+
+# ── _is_dev_build / _app_name ─────────────────────────────────────────────────
+
+class TestIsDevBuild:
+    def test_false_when_marker_absent(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert _is_dev_build() is False
+
+    def test_true_when_marker_present(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert _is_dev_build() is True
+
+    def test_marker_content_is_never_parsed(self, monkeypatch, tmp_path):
+        # Presence-only check — garbage content must not raise or affect result.
+        (tmp_path / "_devbuild").write_text("not valid json or anything parseable {{{")
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert _is_dev_build() is True
+
+
+class TestAppName:
+    def test_returns_inkwave_when_not_dev_build(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert _app_name() == "Inkwave"
+
+    def test_returns_inkwave_dev_when_dev_build(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert _app_name() == "Inkwave-Dev"
+
+    def test_matches_shared_dev_app_name_constant(self):
+        # Locks _app_name()'s dev-build string to the same constant
+        # inkwave.spec's _display_name/_exe_name derivation must match
+        # (verified independently in test_build_dev.py).
+        assert app._DEV_APP_NAME == "Inkwave-Dev"
 
 
 # ── _filter_pywebview_errors ──────────────────────────────────────────────────

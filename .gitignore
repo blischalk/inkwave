@@ -10,6 +10,8 @@ coverage/
 # PyInstaller build artifacts
 build/
 dist/
+build-dev/
+dist-dev/
 __pycache__/
 *.pyc
 .DS_Store

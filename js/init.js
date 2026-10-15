@@ -45,7 +45,9 @@ window.__applySettings = function (dataStr) {
     if (settings && settings.fullWidth === "true") {
       applyFullWidth(true);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error("__applySettings: failed to apply settings:", e);
+  }
 };
 
 // Restore appearance settings from localStorage (for non-Python-injected settings path)
