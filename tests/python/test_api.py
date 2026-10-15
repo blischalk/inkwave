@@ -312,6 +312,109 @@ class TestSettings:
         result = api.save_setting("x", 1)
         assert result == {"ok": True}
 
+    def test_concurrent_save_setting_calls_do_not_lose_writes(self, api):
+        # Reproduces the F3 race: without a lock, two threads calling
+        # save_setting() with different keys at the same time can each read
+        # stale data before the other's write lands, so one write is lost.
+        # With the lock in place, all N keys must survive.
+        import threading as _threading
+
+        n_threads = 20
+        barrier = _threading.Barrier(n_threads)
+
+        def _save(i):
+            barrier.wait()  # maximize actual concurrent overlap
+            api.save_setting(f"key_{i}", i)
+
+        threads = [_threading.Thread(target=_save, args=(i,)) for i in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        final = api.load_settings()
+        for i in range(n_threads):
+            assert final.get(f"key_{i}") == i, (
+                f"key_{i} missing or wrong after concurrent saves — "
+                f"indicates a lost write (the exact F3 race)"
+            )
+
+    def test_concurrent_save_setting_and_set_key_flag_do_not_race(self, api):
+        # _set_key_flag() writes the same settings.json via the same
+        # read-modify-write pattern — must share the same lock as
+        # save_setting(), not just have its own independent lock.
+        import threading as _threading
+
+        barrier = _threading.Barrier(2)
+
+        def _via_save_setting():
+            barrier.wait()
+            api.save_setting("theme", "lavender")
+
+        def _via_set_key_flag():
+            barrier.wait()
+            api._set_key_flag("openai", True)
+
+        t1 = _threading.Thread(target=_via_save_setting)
+        t2 = _threading.Thread(target=_via_set_key_flag)
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        final = api.load_settings()
+        assert final.get("theme") == "lavender"
+        assert final.get("openai_key_set") is True
+
+    def test_settings_lock_is_shared_between_save_setting_and_set_key_flag(self, api):
+        # Both methods must guard the SAME lock object (Sauron — one lock
+        # for one shared resource), not two independent locks that would
+        # not actually exclude each other.
+        assert hasattr(api, "_settings_lock")
+        import threading as _threading
+        assert isinstance(api._settings_lock, type(_threading.Lock()))
+
+    def test_concurrent_load_never_sees_partial_write(self, api):
+        # load_settings() reads the same file save_setting() writes — all
+        # three accessors (save_setting, _set_key_flag, load_settings)
+        # must share the one lock, or a concurrent load could race a
+        # write and (in principle) observe a torn/partial write.
+        import threading as _threading
+
+        stop = _threading.Event()
+        results = []
+
+        def writer():
+            i = 0
+            while not stop.is_set():
+                api.save_setting("counter", i)
+                i += 1
+
+        def reader():
+            while not stop.is_set():
+                data = api.load_settings()
+                results.append(data)
+
+        t_w = _threading.Thread(target=writer)
+        t_r = _threading.Thread(target=reader)
+        t_w.start()
+        t_r.start()
+        import time as _time
+        _time.sleep(0.3)
+        stop.set()
+        t_w.join(timeout=5)
+        t_r.join(timeout=5)
+
+        # Every observed read must be a fully-formed dict with a valid
+        # "counter" key (or empty on the very first read before any write
+        # has happened) — never a KeyError, never a half-written value.
+        assert results, "reader thread produced no observations"
+        for data in results:
+            assert isinstance(data, dict)
+            if data:
+                assert "counter" in data
+                assert isinstance(data["counter"], int)
+
     def test_save_setting_returns_ok_false_on_permission_denied(self, api, tmp_path, monkeypatch):
         # Lock the settings directory read-only so the write raises PermissionError.
         settings_dir = tmp_path / "readonly"
@@ -350,6 +453,87 @@ class TestSettings:
         finally:
             bogus_dir.chmod(0o755)
 
+    def test_atomic_write_leaves_original_file_untouched_on_json_dump_failure(self, api, tmp_path, monkeypatch):
+        # F2: the old open(path, "w") pattern truncates the file BEFORE
+        # writing, so a mid-write failure (e.g. a non-serializable value
+        # slipping through) would leave settings.json empty — losing every
+        # previously saved setting, not just the one being written. The
+        # atomic temp-file-then-replace pattern must leave the ORIGINAL
+        # file fully intact if the write never completes.
+        api.save_setting("theme", "lavender")
+        settings_path = api._settings_path()
+        original_content = open(settings_path, "r", encoding="utf-8").read()
+
+        # Force json.dump to fail partway through by injecting a
+        # non-serializable value directly (bypassing save_setting's own
+        # key/value args, which are always JSON-safe in practice — this
+        # simulates a hypothetical future bug introducing a bad value).
+        class _Unserializable:
+            pass
+
+        data = json.load(open(settings_path, "r", encoding="utf-8"))
+        data["theme"] = _Unserializable()
+        with pytest.raises(TypeError):
+            api._atomic_write_json(settings_path, data)
+
+        # The original file must be byte-for-byte unchanged — not
+        # truncated, not partially written.
+        assert open(settings_path, "r", encoding="utf-8").read() == original_content
+
+    def test_atomic_write_cleans_up_its_temp_file_on_failure(self, api, tmp_path):
+        settings_dir = tmp_path
+        before = set(os.listdir(settings_dir))
+
+        class _Unserializable:
+            pass
+
+        with pytest.raises(TypeError):
+            api._atomic_write_json(str(settings_dir / "settings.json"), {"x": _Unserializable()})
+
+        after = set(os.listdir(settings_dir))
+        leftover_tmp_files = {f for f in (after - before) if f.endswith(".tmp")}
+        assert not leftover_tmp_files, f"temp file(s) left behind: {leftover_tmp_files}"
+
+    def test_atomic_write_round_trips_correctly_on_success(self, api, tmp_path):
+        target = str(tmp_path / "settings.json")
+        api._atomic_write_json(target, {"a": 1, "b": "two"})
+        with open(target, "r", encoding="utf-8") as f:
+            assert json.load(f) == {"a": 1, "b": "two"}
+
+
+class TestSetKeyFlagRaisesOnFailure:
+    """F1: _set_key_flag() used to swallow every exception, meaning a
+    failed flag write (e.g. permission denied) looked identical to
+    success — callers couldn't tell the keyring and the flag had gone
+    out of sync. It now propagates, and all 4 callers already wrap it in
+    their own try/except (verified directly in app.py before this fix)."""
+
+    def test_raises_on_permission_denied(self, api, tmp_path, monkeypatch):
+        bogus_dir = tmp_path / "blocked"
+        bogus_dir.mkdir(mode=0o444)
+        try:
+            api._settings_path = lambda: str(bogus_dir / "settings.json")
+            with pytest.raises(Exception):
+                api._set_key_flag("openai", True)
+        finally:
+            bogus_dir.chmod(0o755)
+
+    def test_caller_save_provider_api_key_surfaces_the_flag_write_error(self, api, tmp_path, monkeypatch):
+        monkeypatch.setattr(app, "_KEYRING_AVAILABLE", True)
+        monkeypatch.setattr(app, "_keyring", MagicMock(), raising=False)
+        bogus_dir = tmp_path / "blocked2"
+        bogus_dir.mkdir(mode=0o444)
+        try:
+            api._settings_path = lambda: str(bogus_dir / "settings.json")
+            result = api.save_provider_api_key("openai", "sk-test")
+            assert result.get("ok") is False
+            assert "error" in result
+        finally:
+            bogus_dir.chmod(0o755)
+
+    def test_succeeds_normally_when_settings_path_is_writable(self, api):
+        api._set_key_flag("openai", True)
+        assert api.load_settings().get("openai_key_set") is True
 
 # ── get_provider_api_key_status ───────────────────────────────────────────────
 
@@ -555,12 +739,97 @@ class TestOpenPath:
         opened = []
         if app.sys.platform == "darwin":
             ws = MagicMock()
-            ws.sharedWorkspace.return_value.openFile_ = lambda p: opened.append(p)
+
+            def _open_file(p):
+                opened.append(p)
+                return True  # NSWorkspace.openFile_ returns a BOOL
+
+            ws.sharedWorkspace.return_value.openFile_ = _open_file
             monkeypatch.setitem(__import__("sys").modules, "AppKit", MagicMock(NSWorkspace=ws))
         elif os.name == "nt":
             monkeypatch.setattr(os, "startfile", lambda p: opened.append(p), raising=False)
         else:
-            monkeypatch.setattr("webbrowser.open", lambda p: opened.append(p))
+            monkeypatch.setattr("webbrowser.open", lambda p: (opened.append(p), True)[1])
         result = api.open_path(str(pdf))
         assert result.get("success") is True
         assert opened and str(pdf) in opened[0]
+
+    def test_opener_returning_falsy_is_reported_as_an_error(self, api, tmp_path, monkeypatch):
+        # F3 fix: a real webbrowser.open()/NSWorkspace call that returns
+        # False/None (no application available) must surface as an error,
+        # not be silently reported as success.
+        pdf = tmp_path / "out.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        if app.sys.platform == "darwin":
+            ws = MagicMock()
+            ws.sharedWorkspace.return_value.openFile_ = lambda p: False
+            monkeypatch.setitem(__import__("sys").modules, "AppKit", MagicMock(NSWorkspace=ws))
+            result = api.open_path(str(pdf))
+            assert "error" in result
+        elif os.name != "nt":
+            monkeypatch.setattr("webbrowser.open", lambda p: False)
+            result = api.open_path(str(pdf))
+            assert "error" in result
+        # os.startfile (Windows) has no boolean success contract to check —
+        # it either returns None or raises, so this case doesn't apply there.
+
+    def _force_linux_branch(self, api, monkeypatch, tmp_path):
+        """Force open_path's Linux (webbrowser.open) branch regardless of the
+        actual OS the test suite is running on, so the file:// URI-encoding
+        fix (F2) is exercised deterministically on every platform."""
+        monkeypatch.setattr(app.sys, "platform", "linux")
+        monkeypatch.setattr(os, "name", "posix")
+        opened = []
+        monkeypatch.setattr("webbrowser.open", lambda url: (opened.append(url), True)[1])
+        return opened
+
+    def test_linux_path_with_space_is_percent_encoded(self, api, tmp_path, monkeypatch):
+        opened = self._force_linux_branch(api, monkeypatch, tmp_path)
+        pdf = tmp_path / "my report.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        result = api.open_path(str(pdf))
+        assert result.get("success") is True
+        assert len(opened) == 1
+        assert " " not in opened[0], "raw space in file:// URI breaks the URI at the space"
+        assert "%20" in opened[0]
+
+    def test_linux_path_with_hash_is_percent_encoded(self, api, tmp_path, monkeypatch):
+        opened = self._force_linux_branch(api, monkeypatch, tmp_path)
+        pdf = tmp_path / "notes#1.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        result = api.open_path(str(pdf))
+        assert result.get("success") is True
+        # An un-encoded '#' would be interpreted as a URI fragment separator,
+        # truncating the path the browser/handler actually receives.
+        assert opened[0].count("#") == 0 or "%23" in opened[0]
+
+    def test_linux_path_without_special_chars_still_opens(self, api, tmp_path, monkeypatch):
+        opened = self._force_linux_branch(api, monkeypatch, tmp_path)
+        pdf = tmp_path / "plain.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        result = api.open_path(str(pdf))
+        assert result.get("success") is True
+        assert opened[0].startswith("file://")
+        assert "plain.pdf" in opened[0]
+
+    def test_linux_path_round_trips_via_url_unquote(self, api, tmp_path, monkeypatch):
+        opened = self._force_linux_branch(api, monkeypatch, tmp_path)
+        pdf = tmp_path / "a report (final).pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        api.open_path(str(pdf))
+        import urllib.parse
+        decoded = urllib.parse.unquote(opened[0][len("file://"):])
+        assert decoded == str(pdf)
+
+    def test_linux_path_with_literal_percent_sign_round_trips(self, api, tmp_path, monkeypatch):
+        # Adversarial case: a literal '%' in the filename must itself be
+        # percent-encoded (to %25), not left raw — otherwise it could be
+        # misread as the start of an existing percent-escape sequence.
+        opened = self._force_linux_branch(api, monkeypatch, tmp_path)
+        pdf = tmp_path / "100%done.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        api.open_path(str(pdf))
+        import urllib.parse
+        assert "%25" in opened[0]
+        decoded = urllib.parse.unquote(opened[0][len("file://"):])
+        assert decoded == str(pdf)

@@ -85,10 +85,23 @@ function resolveImages(container, filePath) {
 }
 import { dbg } from "./debug.js";
 
-function applyDocFontSize() {
-  document.querySelectorAll('.pane .rendered, .pane .raw-editor').forEach(el => {
-    el.style.fontSize = docFontSize + "rem";
-  });
+export const FONT_SIZE_DEFAULT = 0.95;
+
+export function applyScaleZoom(el) {
+  const scale = docFontSize / FONT_SIZE_DEFAULT;
+  if (Math.abs(scale - 1) < 0.001) {
+    el.style.transform = "";
+    el.style.transformOrigin = "";
+    el.style.width = "";
+  } else {
+    el.style.transform = "scale(" + scale + ")";
+    el.style.transformOrigin = "top left";
+    el.style.width = (100 / scale) + "%";
+  }
+}
+
+export function applyDocFontSize() {
+  document.querySelectorAll('.pane .rendered, .pane .raw-editor').forEach(applyScaleZoom);
 }
 
 /** Update block raw so the first image has the given width/height (px). Handles ![alt](url) and <img>. */
