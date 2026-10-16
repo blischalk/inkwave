@@ -70,6 +70,9 @@ export function getContentEl() {
 export let dblClickEdit = true;
 export function setDblClickEdit(v) { dblClickEdit = v; }
 
+export let showWelcomeOnStartup = true;
+export function setShowWelcomeOnStartup(v) { showWelcomeOnStartup = v; }
+
 // Timestamp of the most recent inline-edit dismissal, used so the click that
 // blurred an editor isn't also treated as an empty-space click to add a block.
 export let lastEditDismissAt = 0;
@@ -109,3 +112,11 @@ export function registerShowWelcomeOrEmpty(fn) { onShowWelcomeOrEmpty = fn; }
 
 export let onStartInlineEdit = null;
 export function registerStartInlineEdit(fn) { onStartInlineEdit = fn; }
+
+// Called synchronously by tabs.js::closeTab() with the tab object BEFORE
+// it's spliced out of `tabs`. Lets scratch.js (U4: silently discard an
+// empty, never-typed-in scratch file on close) hook tab-close without
+// tabs.js needing to import scratch.js (would be circular: scratch.js
+// already imports addTab/getTabTitle from tabs.js).
+export let onBeforeCloseTab = null;
+export function registerBeforeCloseTab(fn) { onBeforeCloseTab = fn; }

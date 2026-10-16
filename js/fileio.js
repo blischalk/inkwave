@@ -1,9 +1,11 @@
 import {
   currentTabRef, currentBlocks, contentEl,
+  activeTabId, setActiveTabId,
 } from "./state.js";
 import { getApi } from "./api.js";
 import { blocksToContent } from "./blocks.js";
 import { getTabTitle, renderTabBar } from "./tabs.js";
+import { forgetScratchTab, pushUnsavedScratchState } from "./scratch.js";
 import { showError } from "./utils.js";
 
 // ── Per-tab undo / redo ───────────────────────────────────────────────────────
@@ -55,25 +57,62 @@ export function saveToFile(tab) {
     .catch((err) => {
       showError((err && (err.message || err)) || "Save failed.");
     });
+  // Push updated unsaved-scratch state for the quit-time check (only
+  // scratch tabs matter — see js/scratch.js's pushUnsavedScratchState
+  // docstring). Deliberately NOT awaited/chained onto write_file's own
+  // promise: this is independent, fire-and-forget bookkeeping, and must
+  // never block or fail the actual file save.
+  if (tab._isScratch) pushUnsavedScratchState();
 }
 
 export function saveOrSaveAs(tab) {
   if (!tab) return;
-  if (tab.path) {
+  if (tab.path && !tab._isScratch) {
     saveToFile(tab);
     return;
   }
-  // No path yet — prompt Save As.
+  // No path yet (brand new tab), OR a scratch tab (which already has a
+  // path under the drafts dir but hasn't been given a real, permanent
+  // home yet) — prompt Save As. Scratch tabs still autosave to their
+  // drafts-dir path on every edit via saveToFile() called directly from
+  // editor.js's edit-commit handlers (unchanged, no dialog); it's only
+  // the explicit Cmd+S / Save-As action that offers to promote a
+  // scratch note to a permanent, user-chosen location.
   const a = getApi();
   if (!a || typeof a.save_as !== "function") return;
   a.save_as(tab.title || "Untitled.md")
     .then((result) => {
       if (!result || !result.path) return;
+      // Boyscout fix (discovered during scratch-file plan pushback):
+      // tab.id is being reassigned below to the new path, but
+      // activeTabId is a SEPARATE module-level variable in state.js
+      // that getActiveTab() matches against. If this tab is currently
+      // active, activeTabId must be updated to the new id in the same
+      // breath, or the very next getActiveTab() call silently returns
+      // null because it's still looking for the OLD id.
+      const oldId = tab.id;
+      const wasActive = activeTabId === oldId;
       tab.path = result.path;
       tab.id = result.path;
       tab.title = getTabTitle(result.path);
+      if (wasActive) setActiveTabId(tab.id);
       renderTabBar();
       saveToFile(tab);
+      // If this was an unsaved scratch tab, it now has a real path and
+      // file on disk via saveToFile above — stop tracking it as a
+      // scratch draft (via the single shared forgetScratchTab() in
+      // scratch.js, not a second ad-hoc a.forget_scratch_file() call
+      // site — Sauron rule, one path per operation), delete the old
+      // Untitled N.md (its content now lives at the new path), so it
+      // isn't offered for reload-on-launch and doesn't linger as an
+      // orphaned duplicate.
+      if (tab._isScratch) {
+        forgetScratchTab(oldId);
+        if (typeof a.delete_file === "function" && oldId !== tab.path) {
+          a.delete_file(oldId).catch(() => {});
+        }
+        tab._isScratch = false;
+      }
     })
     .catch((err) => {
       showError((err && (err.message || err)) || "Save failed.");

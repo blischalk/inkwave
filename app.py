@@ -191,13 +191,62 @@ BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 
 # User data dir for settings — must be writable and persistent across runs.
 # _MEIPASS is a temp dir that's wiped on exit, so we can't write settings there.
-def _user_data_dir():
+#
+# Boyscout fix (found while merging prerequisite branches, 2026-10-15):
+# the scratch-files feature (commit 38bd198) calls _user_data_dir(_app_name())
+# — a one-argument form with a companion _app_name()/_is_dev_build() helper
+# set — but this branch (built from fork/main) only had the OLDER,
+# zero-argument _user_data_dir() with no _app_name/_is_dev_build at all.
+# That dev/prod dir-isolation work exists as its own separate feature
+# (already fixed and pushed as PR #15, "Isolate dev builds from production
+# settings and logs") but had never been merged into fork/main, so
+# scratch-files' dependency on it was silently broken on this branch —
+# every _drafts_dir()/_user_data_dir() call raised NameError, caught by a
+# bare except in some callers and left uncaught in others. Ported the
+# updated signature + both helper functions verbatim from that PR's
+# commit (6133b6c) rather than re-deriving them, since that's the actual
+# source of truth for this exact code.
+def _user_data_dir(app_name: str = "Inkwave") -> str:
+    """Return the OS app-data directory for `app_name`.
+
+    Default matches the production app's historical path exactly — callers
+    that don't pass app_name see zero behavior change.
+
+    Raises:
+        ValueError: if app_name is empty or contains path-traversal segments.
+    """
+    if not app_name:
+        raise ValueError("app_name must be non-empty")
+    if os.path.sep in app_name or (os.path.altsep and os.path.altsep in app_name) or ".." in app_name:
+        raise ValueError(f"app_name must not contain path separators or '..': {app_name!r}")
     if sys.platform == 'darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Inkwave')
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', app_name)
     elif os.name == 'nt':
-        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Inkwave')
+        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
     else:
-        return os.path.join(os.path.expanduser('~'), '.inkwave')
+        return os.path.join(os.path.expanduser('~'), '.' + app_name.lower())
+
+
+# Shared dev-build app name, kept in sync with inkwave.spec's _display_name/
+# _exe_name derivation via test_build_dev.py's exact-string-match assertion
+# (PyInstaller .spec files cannot import from app.py at analysis time).
+_DEV_APP_NAME = "Inkwave-Dev"
+
+
+def _is_dev_build() -> bool:
+    """Return True if the frozen bundle's `_devbuild` marker file is present
+    alongside BASE_DIR. Always False when not frozen — the marker is only
+    ever extracted into a PyInstaller-frozen bundle's _MEIPASS directory,
+    never present when running from source."""
+    return os.path.exists(os.path.join(BASE_DIR, "_devbuild"))
+
+
+def _app_name() -> str:
+    """Return 'Inkwave-Dev' if this is a dev build, else 'Inkwave'.
+
+    Single source of truth for the app-data directory name, consumed by
+    _settings_path() and main()'s log file setup."""
+    return _DEV_APP_NAME if _is_dev_build() else "Inkwave"
 
 # File dialog types (new API + fallbacks for older pywebview)
 _file_dialog = getattr(webview, "FileDialog", None)
@@ -369,6 +418,20 @@ class Api:
         self._window = window  # use private name so it's less likely to be introspected
         self._doom_proc = None
         self._settings_lock = threading.Lock()  # guards read-modify-write in save_setting
+        # Pushed from js/scratch.js's pushUnsavedScratchState() whenever
+        # scratch-tab state changes (create, autosave, close). Defaults
+        # True (fail toward asking the user) until the first real push
+        # arrives — see check_unsaved_scratch_on_quit's docstring for why
+        # this plain-attribute design replaced a deadlocking evaluate_js
+        # call on window close.
+        self._has_unsaved_scratch = True
+
+    def set_has_unsaved_scratch(self, value):
+        """Called from JS (js/scratch.js) whenever scratch-tab unsaved
+        state changes. Plain, non-blocking attribute write — see
+        check_unsaved_scratch_on_quit's docstring for why this exists."""
+        self._has_unsaved_scratch = bool(value)
+        return None
 
     def open_file(self):
         """Pick a markdown file; returns root (parent dir), path, content (or error)."""
@@ -484,6 +547,120 @@ class Api:
             return {"path": path, "content": content}
         except Exception as e:
             return {"path": path, "content": None, "error": str(e)}
+
+    def _drafts_dir(self):
+        """Return the per-OS drafts subdirectory, creating it if missing."""
+        base = _user_data_dir(_app_name()) if getattr(sys, 'frozen', False) else BASE_DIR
+        path = os.path.join(base, "drafts")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _drafts_registry_path(self):
+        """Return the path to drafts.json inside the drafts directory."""
+        return os.path.join(self._drafts_dir(), "drafts.json")
+
+    @staticmethod
+    def _atomic_write_json(path, data):
+        """Write `data` as JSON to `path` atomically.
+
+        Writes to a temp file in the same directory, then os.replace()'s it
+        over the target — atomic on both POSIX and modern Windows. Prevents
+        the plain open(path, "w") truncate-then-write pattern from leaving
+        an empty or partially-written file (and losing every previously
+        saved setting) if the process dies mid-write.
+
+        Boyscout fix (found while merging prerequisite branches,
+        2026-10-15): this method was called by _save_drafts_registry but
+        never defined anywhere in this branch's app.py. Confirmed via
+        `git log --all -S"_atomic_write_json"` that it was introduced
+        upstream by commit 1edb972 ("Stop silently losing settings on
+        write failure", part of already-merged PR #14 on
+        blischalk/inkwave) — which landed on origin/main but never on
+        fork/main, the branch this feature was actually built from. The
+        missing method call raised AttributeError on every save, silently
+        swallowed by _save_drafts_registry's own bare `except Exception`
+        (logged only at DEBUG level), so drafts.json was never actually
+        being written at all. Ported verbatim from 1edb972.
+        """
+        dir_name = os.path.dirname(path) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    def _load_drafts_registry(self):
+        """Load the drafts registry. Returns a list of {"path": str} dicts,
+        falling back to an empty list on any missing/corrupt file so launch
+        never crashes on a bad registry."""
+        try:
+            with open(self._drafts_registry_path(), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+                return []
+        except Exception:
+            return []
+
+    def _save_drafts_registry(self, entries):
+        """Persist the drafts registry atomically."""
+        try:
+            self._atomic_write_json(self._drafts_registry_path(), entries)
+        except Exception as e:
+            logger.debug("failed to save drafts registry: %s", e)
+
+    def create_scratch_file(self):
+        """Create a new Untitled N.md scratch file under the drafts dir and
+        register it in drafts.json. Returns { path, content } on success,
+        or { path: None, content: None, error } on failure. Delegates
+        filename collision avoidance and the actual write to create_file."""
+        result = self.create_file(self._drafts_dir(), "Untitled.md")
+        if result.get("error"):
+            return result
+        entries = self._load_drafts_registry()
+        entries.append({"path": result["path"]})
+        self._save_drafts_registry(entries)
+        return result
+
+    def list_scratch_files(self):
+        """Return every registered scratch file that still exists on disk,
+        with its content inlined so JS doesn't need a second read per
+        entry. Returns { files: [{ path, content }] }. Entries whose file
+        was deleted out-of-band are dropped from the registry (self-healing,
+        same tolerance-of-drift behavior as load_settings)."""
+        entries = self._load_drafts_registry()
+        files = []
+        kept_entries = []
+        for entry in entries:
+            path = entry.get("path") if isinstance(entry, dict) else None
+            if not path or not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                continue
+            files.append({"path": path, "content": content})
+            kept_entries.append({"path": path})
+        if len(kept_entries) != len(entries):
+            self._save_drafts_registry(kept_entries)
+        return {"files": files}
+
+    def forget_scratch_file(self, path):
+        """Remove `path` from the drafts registry. Idempotent: always
+        returns a success dict, even if the path was never registered."""
+        entries = self._load_drafts_registry()
+        filtered = [e for e in entries if not (isinstance(e, dict) and e.get("path") == path)]
+        if len(filtered) != len(entries):
+            self._save_drafts_registry(filtered)
+        return {"ok": True}
+
 
     def save_image(self, md_file_path, filename, base64_content):
         """Save an image file next to the given markdown file. Returns { path, name } or { error }."""
@@ -893,6 +1070,100 @@ class Api:
             pass
 
 
+def check_unsaved_scratch_on_quit(window, api):
+    """window.events.closing handler, called with the live pywebview Window
+    and the live Api instance.
+
+    HISTORY (bug found 2026-10-15, reported by the user as "hangs on
+    exit"): the original implementation called window.evaluate_js(...)
+    synchronously from this handler to read window.__hasUnsavedScratchTabs()
+    on the JS side. That is a GUARANTEED DEADLOCK on the cocoa (macOS)
+    backend, not a flaky/conditional one: window.events.closing fires
+    synchronously on the main thread (confirmed via spindump of the real
+    hang: -[NSWindow __close] -> ... -> PyThread_acquire_lock_timed, main
+    thread only, every other thread idle). cocoa's evaluate_js
+    (venv/.../webview/platforms/cocoa.py BrowserView.evaluate_js) schedules
+    the actual JS execution via AppHelper.callAfter(eval) — which only runs
+    on a FUTURE main-thread run-loop iteration — then blocks the CALLING
+    thread on a Semaphore(0).acquire(). Calling this from the main thread
+    itself is a classic self-deadlock: the main thread blocks waiting for
+    a callback that can only be delivered by the main thread's own run
+    loop, which it has stopped spinning. This happens unconditionally on
+    this call, regardless of whether any scratch tabs actually exist —
+    the deadlock is in evaluate_js's own acquire(), before the result is
+    ever inspected.
+
+    The previous unit tests (TestCheckUnsavedScratchOnQuit, below in the
+    test file) all passed because they mock window with MagicMock(),
+    which returns a plain MagicMock() from evaluate_js() instantly —
+    never exercising the real AppHelper.callAfter + Semaphore mechanism
+    that deadlocks on a real cocoa window. Mocking hid the bug; the
+    "verified live" claim in the original docstring version referred to
+    this same mocked unit test, not a real end-to-end quit.
+
+    FIX (first bug, 2026-10-15): never call evaluate_js from this handler.
+    Instead, api carries a plain Python boolean (api._has_unsaved_scratch,
+    pushed proactively from JS via Api.set_has_unsaved_scratch() whenever
+    scratch-tab state changes — see js/scratch.js's
+    pushUnsavedScratchState()). Reading a plain attribute requires no
+    cross-thread call into the JS engine at all, so there is nothing to
+    deadlock on there.
+
+    SECOND BUG (found the SAME day, same user report recurring after the
+    first fix shipped): this handler used to call
+    window.create_confirmation_dialog(...) when has_unsaved was True, to
+    ask the user "quit anyway?". create_confirmation_dialog has the
+    IDENTICAL AppHelper.callAfter + Semaphore(0).acquire() pattern as
+    evaluate_js (see venv/.../webview/platforms/cocoa.py's module-level
+    create_confirmation_dialog function) — calling it from the main
+    thread, which is exactly where this handler always runs
+    (window.events.closing's should_lock=True, confirmed via a SECOND
+    spindump showing the identical deadlock shape one call later:
+    -[NSApplication terminate:] -> ... ->
+    -[NSApplication _docController:shouldTerminate:] -> ffi_closure ->
+    Python -> PyThread_acquire_lock_timed), is the exact same
+    self-deadlock as the first bug, just one line further down in this
+    same function. The confirmation dialog is NOT just conditionally
+    risky — ANY attempt to show a blocking native dialog from this
+    synchronous main-thread AppKit callback chain deadlocks on cocoa, with
+    no safe async variant available anywhere in pywebview's API (checked:
+    window.py's create_confirmation_dialog wrapper has no callback/async
+    parameter, and no backend offers one).
+
+    FIX (second bug): never show ANY dialog from this handler. Always
+    allow the quit (return None unconditionally). The ACTUAL data-loss
+    protection for scratch notes is reload-on-launch (reloadScratchFiles
+    in js/scratch.js, Phase C of the original scratch-file plan) — a
+    scratch tab's content is autosaved to disk on every keystroke (see
+    js/fileio.js's saveToFile, called from editor.js's commit handlers),
+    so there is no byte-level data loss risk from skipping the
+    confirmation; the dialog's only purpose was reminding the user a
+    scratch note exists (it has no folder/location of its own), and
+    reload-on-launch already covers that by surfacing it again on next
+    startup regardless.
+
+    Returning False from a closing handler cancels the close
+    (should_cancel=True in cocoa.py's should_close); returning anything
+    else (including None) allows it. This function now always returns
+    None (never blocks the quit) — see the second-bug FIX note above for
+    why a confirmation dialog can never safely be shown from here.
+    """
+    # has_unsaved is read for logging/diagnostic value only now — it no
+    # longer gates a dialog. Kept so a future session can see at a
+    # glance (via logger.debug output) whether scratch content existed
+    # at quit time, without needing to show anything to the user.
+    has_unsaved = getattr(api, "_has_unsaved_scratch", True)
+    if has_unsaved:
+        logger.debug(
+            "check_unsaved_scratch_on_quit: unsaved scratch content exists at "
+            "quit time; allowing quit without a dialog (see this function's "
+            "docstring — confirmation dialogs deadlock on cocoa when shown "
+            "from this synchronous main-thread handler). Reload-on-launch "
+            "will surface it again next startup."
+        )
+    return None
+
+
 def main():
     if os.name == "nt":
         sys.stderr = StderrFilter(sys.__stderr__)
@@ -1093,12 +1364,22 @@ def main():
             "installMenuItems:", None, False)
 
     try:
-        window.events.loaded += inject_welcome
+        # inject_settings MUST run before inject_welcome: __applyWelcome
+        # checks the showWelcomeOnStartup state that only __applySettings
+        # sets. Reversed order meant the welcome screen always rendered
+        # regardless of the saved setting, since __applySettings hadn't
+        # run yet when __applyWelcome made its decision.
         window.events.loaded += inject_settings
+        window.events.loaded += inject_welcome
         window.events.loaded += inject_open_file
         window.events.loaded += inject_edit_menu
     except Exception:
         pass
+
+    try:
+        window.events.closing += (lambda: check_unsaved_scratch_on_quit(window, api))
+    except Exception as e:
+        logger.warning("Failed to register window.events.closing callback: %s", e)
 
     # Persist window geometry on resize/move (debounced)
     _geo_timer = None

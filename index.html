@@ -5,17 +5,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Inkwave</title>
         <link rel="stylesheet" href="style.css" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link id="googleFontsLink" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet"
-              onerror="this.onerror=null;this.href='vendor/fonts.css';window.__offlineFallback=true;" />
-        <link rel="stylesheet"
-              href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
-              onerror="this.onerror=null;this.href='vendor/atom-one-dark.min.css';window.__offlineFallback=true;" />
-        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/marked.min.js';document.head.appendChild(s);"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/highlight.min.js';document.head.appendChild(s);"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/bash.min.js';document.head.appendChild(s);"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/shell.min.js" onerror="window.__offlineFallback=true;var s=document.createElement('script');s.src='vendor/shell.min.js';document.head.appendChild(s);"></script>
+        <!-- Offline-only: every asset below is vendored in-repo (vendor/). -->
+        <link href="vendor/fonts.css" rel="stylesheet" />
+        <link rel="stylesheet" href="vendor/atom-one-dark.min.css" />
+        <script src="vendor/marked.min.js"></script>
+        <script src="vendor/highlight.min.js"></script>
+        <script src="vendor/bash.min.js"></script>
+        <script src="vendor/shell.min.js"></script>
     </head>
     <body>
         <div class="toolbar">
@@ -293,7 +289,10 @@
                         <div class="content empty" id="content-secondary"></div>
                     </div>
                 </div>
-                <div id="vimStatus" class="vim-status" aria-live="polite"></div>
+                <div class="status-bar">
+                    <span id="editorModeLabel" class="editor-mode-label" aria-live="polite">Edit</span>
+                    <div id="vimStatus" class="vim-status" aria-live="polite"></div>
+                </div>
             </div>
             <div id="tocPanel" class="toc-panel" inert>
                 <div class="toc-panel-header">
@@ -405,6 +404,13 @@
                             <span class="settings-row-desc">Double-clicking a block starts inline editing. When off, double-click selects text normally.</span>
                         </div>
                         <input type="checkbox" id="dblClickEditToggle" class="settings-toggle" role="switch" aria-checked="true" checked />
+                    </label>
+                    <label class="settings-row" for="showWelcomeToggle">
+                        <div class="settings-row-info">
+                            <span class="settings-row-title">Show welcome screen on startup</span>
+                            <span class="settings-row-desc">Display the welcome screen when Inkwave opens with no file or folder loaded</span>
+                        </div>
+                        <input type="checkbox" id="showWelcomeToggle" class="settings-toggle" role="switch" aria-checked="true" checked />
                     </label>
 
                     <div class="settings-section-title">AI Provider</div>

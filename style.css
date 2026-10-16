@@ -602,6 +602,45 @@ body[data-split="horizontal"] .pane-divider { width: auto; height: 5px; cursor: 
   -webkit-user-select: text;
   user-select: text;
 }
+.raw-editor-wrap {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+.raw-editor-wrap .raw-editor {
+  flex: 1;
+  height: auto;
+}
+.raw-editor-gutter {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.2em;
+  overflow: hidden;
+  background: var(--toolbar-bg);
+  border-right: 1px solid var(--border);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.raw-editor-line-number {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  padding-right: 8px;
+  box-sizing: border-box;
+  text-align: right;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.raw-editor-line-number.raw-editor-current-line {
+  color: var(--text);
+  font-weight: 600;
+  background: rgba(128, 128, 128, 0.15);
+}
 .btn-icon[aria-pressed="true"] {
   background: var(--accent);
   color: var(--btn-text);
@@ -735,6 +774,23 @@ body[data-full-width="true"] .rendered {
 }
 .md-block-empty {
   min-height: 1.5em;
+}
+/* Empty-block ghost placeholder (P1): a single blank document gives zero
+ * visual affordance otherwise. ::before content is excluded from both
+ * contentEditable selection/copy and the saved markdown file by
+ * construction — it is pure CSS-generated content, never part of the
+ * DOM text the editor reads from or writes to disk (confirmed: ::before
+ * pseudo-elements are not part of the accessible DOM text and are not
+ * included in Selection/execCommand copy in Chromium/WebKit). */
+.md-block-empty::before {
+  content: "Start writing...";
+  color: var(--muted);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.md-block-empty.editing::before {
+  content: none;
 }
 /* Image resize: wrap and handle */
 .md-image-wrap {
@@ -1183,6 +1239,15 @@ body[data-debug="true"] .debug-panel { display: block; }
   color: var(--muted);
   line-height: 1.4;
 }
+.welcome-dismiss-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
 .settings-toggle {
   appearance: none;
   -webkit-appearance: none;
@@ -1210,8 +1275,32 @@ body[data-debug="true"] .debug-panel { display: block; }
 .settings-toggle:checked::after { left: 21px; }
 
 /* ── Vim mode status bar ─────────────────────────────────────────────────── */
-.vim-status {
+.status-bar {
+  display: flex;
+  align-items: stretch;
   flex-shrink: 0;
+}
+.editor-mode-label {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--toolbar-bg);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.editor-mode-label:hover {
+  color: var(--text);
+}
+.vim-status {
+  flex: 1;
   padding: 3px 12px;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.78rem;

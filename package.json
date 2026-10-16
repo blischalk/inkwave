@@ -5,7 +5,9 @@
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@vitest/coverage-v8": "^2.0.0",
+    "http-server": "^14.1.1",
     "jsdom": "^25.0.0",
     "marked": "^14.0.0",
     "vitest": "^2.0.0"
