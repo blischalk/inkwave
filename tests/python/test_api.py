@@ -9,6 +9,108 @@ import app
 from app import Api
 
 
+# ── _user_data_dir / _app_name / _is_dev_build ─────────────────────────────────
+# Added while merging prerequisite branches (2026-10-15): these module-level
+# functions were ported from PR #15 ("Isolate dev builds from production
+# settings and logs") because the scratch-files feature (commit 38bd198)
+# depends on the one-argument _user_data_dir(app_name) signature + the
+# _app_name()/_is_dev_build() helpers, neither of which existed on this
+# branch before this merge — every drafts.json read/write was silently
+# raising NameError, swallowed by a bare except in the caller.
+
+class TestUserDataDir:
+    def test_default_arg_matches_the_original_zero_arg_behavior_on_macos(self, monkeypatch):
+        monkeypatch.setattr(app.sys, "platform", "darwin")
+        assert app._user_data_dir() == os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support", "Inkwave"
+        )
+
+    def test_explicit_app_name_on_macos(self, monkeypatch):
+        monkeypatch.setattr(app.sys, "platform", "darwin")
+        assert app._user_data_dir("Inkwave-Dev") == os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support", "Inkwave-Dev"
+        )
+
+    def test_rejects_empty_app_name(self):
+        with pytest.raises(ValueError):
+            app._user_data_dir("")
+
+    def test_rejects_path_traversal_in_app_name(self):
+        with pytest.raises(ValueError):
+            app._user_data_dir("../escape")
+
+    def test_rejects_path_separator_in_app_name(self):
+        with pytest.raises(ValueError):
+            app._user_data_dir("sub" + os.path.sep + "dir")
+
+
+class TestIsDevBuild:
+    def test_false_when_marker_file_absent(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert app._is_dev_build() is False
+
+    def test_true_when_marker_file_present(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert app._is_dev_build() is True
+
+
+class TestAppName:
+    def test_returns_inkwave_when_not_dev_build(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert app._app_name() == "Inkwave"
+
+    def test_returns_inkwave_dev_when_dev_build(self, monkeypatch, tmp_path):
+        (tmp_path / "_devbuild").write_text("")
+        monkeypatch.setattr(app, "BASE_DIR", str(tmp_path))
+        assert app._app_name() == "Inkwave-Dev"
+
+
+# ── Api._atomic_write_json ──────────────────────────────────────────────────────
+# Dedicated unit coverage for the primitive itself, separate from
+# TestDraftsRegistry.test_save_is_atomic_write (tests/python/
+# test_scratch_files.py), which only proves _save_drafts_registry
+# delegates to this rather than reimplementing a write path.
+
+class TestAtomicWriteJson:
+    def test_writes_valid_json_readable_back(self, tmp_path):
+        path = str(tmp_path / "out.json")
+        Api._atomic_write_json(path, {"a": 1, "b": [2, 3]})
+        with open(path) as f:
+            assert json.load(f) == {"a": 1, "b": [2, 3]}
+
+    def test_overwrites_existing_file_completely(self, tmp_path):
+        path = str(tmp_path / "out.json")
+        Api._atomic_write_json(path, {"old": True})
+        Api._atomic_write_json(path, {"new": True})
+        with open(path) as f:
+            assert json.load(f) == {"new": True}
+
+    def test_leaves_no_tmp_file_behind_on_success(self, tmp_path):
+        path = str(tmp_path / "out.json")
+        Api._atomic_write_json(path, {"a": 1})
+        remaining = os.listdir(str(tmp_path))
+        assert remaining == ["out.json"]
+
+    def test_original_file_untouched_if_json_dump_fails(self, tmp_path, monkeypatch):
+        path = str(tmp_path / "out.json")
+        Api._atomic_write_json(path, {"original": True})
+        with open(path) as f:
+            original_bytes = f.read()
+
+        class Unserializable:
+            pass
+
+        with pytest.raises(TypeError):
+            Api._atomic_write_json(path, {"bad": Unserializable()})
+
+        with open(path) as f:
+            assert f.read() == original_bytes
+        # The failed write's temp file must not linger either.
+        remaining = os.listdir(str(tmp_path))
+        assert remaining == ["out.json"]
+
+
 # ── read_file ────────────────────────────────────────────────────────────────
 
 class TestReadFile:
