@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -189,13 +190,62 @@ BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 
 # User data dir for settings — must be writable and persistent across runs.
 # _MEIPASS is a temp dir that's wiped on exit, so we can't write settings there.
-def _user_data_dir():
+#
+# Boyscout fix (found while merging prerequisite branches, 2026-10-15):
+# the scratch-files feature (commit 38bd198) calls _user_data_dir(_app_name())
+# — a one-argument form with a companion _app_name()/_is_dev_build() helper
+# set — but this branch (built from fork/main) only had the OLDER,
+# zero-argument _user_data_dir() with no _app_name/_is_dev_build at all.
+# That dev/prod dir-isolation work exists as its own separate feature
+# (already fixed and pushed as PR #15, "Isolate dev builds from production
+# settings and logs") but had never been merged into fork/main, so
+# scratch-files' dependency on it was silently broken on this branch —
+# every _drafts_dir()/_user_data_dir() call raised NameError, caught by a
+# bare except in some callers and left uncaught in others. Ported the
+# updated signature + both helper functions verbatim from that PR's
+# commit (6133b6c) rather than re-deriving them, since that's the actual
+# source of truth for this exact code.
+def _user_data_dir(app_name: str = "Inkwave") -> str:
+    """Return the OS app-data directory for `app_name`.
+
+    Default matches the production app's historical path exactly — callers
+    that don't pass app_name see zero behavior change.
+
+    Raises:
+        ValueError: if app_name is empty or contains path-traversal segments.
+    """
+    if not app_name:
+        raise ValueError("app_name must be non-empty")
+    if os.path.sep in app_name or (os.path.altsep and os.path.altsep in app_name) or ".." in app_name:
+        raise ValueError(f"app_name must not contain path separators or '..': {app_name!r}")
     if sys.platform == 'darwin':
-        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', 'Inkwave')
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Application Support', app_name)
     elif os.name == 'nt':
-        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'Inkwave')
+        return os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), app_name)
     else:
-        return os.path.join(os.path.expanduser('~'), '.inkwave')
+        return os.path.join(os.path.expanduser('~'), '.' + app_name.lower())
+
+
+# Shared dev-build app name, kept in sync with inkwave.spec's _display_name/
+# _exe_name derivation via test_build_dev.py's exact-string-match assertion
+# (PyInstaller .spec files cannot import from app.py at analysis time).
+_DEV_APP_NAME = "Inkwave-Dev"
+
+
+def _is_dev_build() -> bool:
+    """Return True if the frozen bundle's `_devbuild` marker file is present
+    alongside BASE_DIR. Always False when not frozen — the marker is only
+    ever extracted into a PyInstaller-frozen bundle's _MEIPASS directory,
+    never present when running from source."""
+    return os.path.exists(os.path.join(BASE_DIR, "_devbuild"))
+
+
+def _app_name() -> str:
+    """Return 'Inkwave-Dev' if this is a dev build, else 'Inkwave'.
+
+    Single source of truth for the app-data directory name, consumed by
+    _settings_path() and main()'s log file setup."""
+    return _DEV_APP_NAME if _is_dev_build() else "Inkwave"
 
 # File dialog types (new API + fallbacks for older pywebview)
 _file_dialog = getattr(webview, "FileDialog", None)
@@ -492,6 +542,42 @@ class Api:
     def _drafts_registry_path(self):
         """Return the path to drafts.json inside the drafts directory."""
         return os.path.join(self._drafts_dir(), "drafts.json")
+
+    @staticmethod
+    def _atomic_write_json(path, data):
+        """Write `data` as JSON to `path` atomically.
+
+        Writes to a temp file in the same directory, then os.replace()'s it
+        over the target — atomic on both POSIX and modern Windows. Prevents
+        the plain open(path, "w") truncate-then-write pattern from leaving
+        an empty or partially-written file (and losing every previously
+        saved setting) if the process dies mid-write.
+
+        Boyscout fix (found while merging prerequisite branches,
+        2026-10-15): this method was called by _save_drafts_registry but
+        never defined anywhere in this branch's app.py. Confirmed via
+        `git log --all -S"_atomic_write_json"` that it was introduced
+        upstream by commit 1edb972 ("Stop silently losing settings on
+        write failure", part of already-merged PR #14 on
+        blischalk/inkwave) — which landed on origin/main but never on
+        fork/main, the branch this feature was actually built from. The
+        missing method call raised AttributeError on every save, silently
+        swallowed by _save_drafts_registry's own bare `except Exception`
+        (logged only at DEBUG level), so drafts.json was never actually
+        being written at all. Ported verbatim from 1edb972.
+        """
+        dir_name = os.path.dirname(path) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _load_drafts_registry(self):
         """Load the drafts registry. Returns a list of {"path": str} dicts,

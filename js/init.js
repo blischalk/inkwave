@@ -1,6 +1,6 @@
 import {
   contentEl, filenameEl, tabs,
-  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, setGradientBold,
+  setWelcomeContent, setVimMode, setLlmProvider, setLlmModel, setDocFontSize, docFontSize, setGradientBold,
   showWelcomeOnStartup, setShowWelcomeOnStartup, setFullWidth,
 } from "./state.js";
 import { loadSettings, saveSettings, applyGradientBold, applyFullWidth } from "./settings.js";
@@ -85,7 +85,7 @@ function renderWelcomeContent(data) {
     '<div class="rendered">' + marked.parse(data.content) + "</div>";
   highlightCodeInContainer(contentEl);
   const r = contentEl.querySelector(".rendered");
-  if (r) applyScaleZoom(r);
+  if (r) r.style.fontSize = docFontSize + "rem";
   filenameEl.textContent = "Welcome";
 
   const dismissRow = document.createElement("label");
