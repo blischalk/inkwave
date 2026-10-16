@@ -510,6 +510,73 @@ export function startInlineEdit(blockEl, index, blocks, tab, clickEvent, cursorH
       executeListItemMove(e.key === "ArrowUp" ? "up" : "down", index, blocks, tab, contentEl);
       return;
     }
+    if (
+      (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+      !e.metaKey && !e.ctrlKey && !e.altKey
+    ) {
+      // Boyscout fix (2026-10-15, user-reported "can't arrow up to the
+      // line above"): each paragraph is its own isolated contenteditable
+      // — the browser has no native concept of "the block above", so
+      // plain ArrowUp/ArrowDown at a block's own text boundary just does
+      // nothing (focus stays put, caret stays at offset 0/end). This was
+      // ALREADY broken before this session's changes (confirmed via git
+      // diff against the pre-feature-branch commit — not a regression
+      // introduced by raw-editor-gutter or any other change here).
+      //
+      // Technique: let the browser try its native ArrowUp/ArrowDown
+      // first (don't preventDefault yet). On the NEXT frame, check
+      // whether the caret's vertical position actually changed — if it
+      // did, the browser successfully moved within this block's own
+      // text (e.g. a wrapped or Shift+Enter multi-line paragraph) and we
+      // do nothing further. If it did NOT change, the browser had
+      // nowhere left to go within this block, so move editing focus into
+      // the adjacent block, landing the cursor at its end (ArrowUp) or
+      // start (ArrowDown) — matching every other text editor's behavior.
+      const key = e.key;
+      const rectBefore = (() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return null;
+        const r = sel.getRangeAt(0).cloneRange();
+        const rects = r.getClientRects();
+        return rects.length ? rects[0] : r.getBoundingClientRect();
+      })();
+      requestAnimationFrame(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || !editable.contains(sel.anchorNode)) return;
+        const r = sel.getRangeAt(0).cloneRange();
+        const rects = r.getClientRects();
+        const rectAfter = rects.length ? rects[0] : r.getBoundingClientRect();
+        const movedVertically =
+          rectBefore && rectAfter && Math.abs(rectAfter.top - rectBefore.top) > 1;
+        if (movedVertically) return; // browser handled it within this block
+        const targetIndex = key === "ArrowUp" ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= currentBlocks.length) return;
+        // Must query for the target block AFTER editable.blur() has
+        // finished running its own blur handler (commit() -> re-render
+        // via onShowTabContent, which replaces contentEl.innerHTML
+        // entirely). Querying BEFORE blur() and holding that reference
+        // across the blur call fails with "The given range isn't in
+        // document" — the node is detached by the re-render before
+        // startInlineEdit ever runs. Same deferred-query-after-rerender
+        // pattern as the existing Backspace-merge-blocks handler above
+        // (setTimeout(..., 0) after its own onShowTabContent call).
+        editable.blur();
+        setTimeout(() => {
+          const targetEl = contentEl.querySelector(
+            '.md-block[data-block-index="' + targetIndex + '"]',
+          );
+          if (!targetEl || targetEl.classList.contains("md-block-table")) return;
+          startInlineEdit(
+            targetEl,
+            targetIndex,
+            currentBlocks,
+            tab,
+            null,
+            key === "ArrowUp" ? true : 0,
+          );
+        }, 0);
+      });
+    }
     if (e.key === "Tab" && blockEl.classList.contains("md-block-code")) {
       e.preventDefault();
       document.execCommand("insertText", false, "    ");
@@ -781,6 +848,12 @@ export function handleEnterInBlock(editable, blockEl, index) {
     tab.content = blocksToContent(blocks);
     currentTabRef.content = tab.content;
     setCurrentBlocks(blocks);
+    // Boyscout fix (found during unrelated code review, 2026-10-15):
+    // every comparable code path in startInlineEdit calls saveToFile
+    // after mutating tab.content — this branch didn't, so an empty
+    // list item removed via Enter was held only in memory until the
+    // next unrelated edit triggered an autosave.
+    saveToFile(tab);
     if (onShowTabContent) onShowTabContent(tab);
     setTimeout(() => {
       const nextEl = contentEl.querySelector(
@@ -811,6 +884,12 @@ export function handleEnterInBlock(editable, blockEl, index) {
   tab.content = blocksToContent(blocks);
   currentTabRef.content = tab.content;
   setCurrentBlocks(blocks);
+  // Boyscout fix (found during unrelated code review, 2026-10-15):
+  // same missing-saveToFile gap as the empty-list-item branch above —
+  // splitting a block via Enter was held only in memory until the next
+  // unrelated edit triggered an autosave. A tab/app close in between
+  // would silently lose the split.
+  saveToFile(tab);
   dbg(
     "handleEnterInBlock: blocks.length=",
     blocks.length,

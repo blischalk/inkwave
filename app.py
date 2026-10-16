@@ -418,6 +418,20 @@ class Api:
         self._window = window  # use private name so it's less likely to be introspected
         self._doom_proc = None
         self._settings_lock = threading.Lock()  # guards read-modify-write in save_setting
+        # Pushed from js/scratch.js's pushUnsavedScratchState() whenever
+        # scratch-tab state changes (create, autosave, close). Defaults
+        # True (fail toward asking the user) until the first real push
+        # arrives — see check_unsaved_scratch_on_quit's docstring for why
+        # this plain-attribute design replaced a deadlocking evaluate_js
+        # call on window close.
+        self._has_unsaved_scratch = True
+
+    def set_has_unsaved_scratch(self, value):
+        """Called from JS (js/scratch.js) whenever scratch-tab unsaved
+        state changes. Plain, non-blocking attribute write — see
+        check_unsaved_scratch_on_quit's docstring for why this exists."""
+        self._has_unsaved_scratch = bool(value)
+        return None
 
     def open_file(self):
         """Pick a markdown file; returns root (parent dir), path, content (or error)."""
@@ -1056,52 +1070,98 @@ class Api:
             pass
 
 
-def check_unsaved_scratch_on_quit(window):
-    """window.events.closing handler, called with the live pywebview Window.
+def check_unsaved_scratch_on_quit(window, api):
+    """window.events.closing handler, called with the live pywebview Window
+    and the live Api instance.
 
-    Verified against the installed pywebview 6.2 on cocoa (macOS):
-    events.closing is registered with Event(window, True), i.e.
-    should_lock=True, so this handler and its evaluate_js call both
-    execute synchronously on the calling thread BEFORE should_close()
-    returns to AppKit. See
-    venv/lib/python3.12/site-packages/webview/event.py (Event.set) and
-    venv/lib/python3.12/site-packages/webview/platforms/cocoa.py
-    (BrowserView.should_close), confirmed during Phase A implementation
-    (verified live via a direct Event() unit test, not source reading
-    alone).
+    HISTORY (bug found 2026-10-15, reported by the user as "hangs on
+    exit"): the original implementation called window.evaluate_js(...)
+    synchronously from this handler to read window.__hasUnsavedScratchTabs()
+    on the JS side. That is a GUARANTEED DEADLOCK on the cocoa (macOS)
+    backend, not a flaky/conditional one: window.events.closing fires
+    synchronously on the main thread (confirmed via spindump of the real
+    hang: -[NSWindow __close] -> ... -> PyThread_acquire_lock_timed, main
+    thread only, every other thread idle). cocoa's evaluate_js
+    (venv/.../webview/platforms/cocoa.py BrowserView.evaluate_js) schedules
+    the actual JS execution via AppHelper.callAfter(eval) — which only runs
+    on a FUTURE main-thread run-loop iteration — then blocks the CALLING
+    thread on a Semaphore(0).acquire(). Calling this from the main thread
+    itself is a classic self-deadlock: the main thread blocks waiting for
+    a callback that can only be delivered by the main thread's own run
+    loop, which it has stopped spinning. This happens unconditionally on
+    this call, regardless of whether any scratch tabs actually exist —
+    the deadlock is in evaluate_js's own acquire(), before the result is
+    ever inspected.
 
-    Calling evaluate_js(script) with no callback blocks and returns the
-    JS value synchronously per window.py's own docstring on evaluate_js
-    ("the result is returned to the caller"). This makes the primary
-    (non-fallback) design from the golden plan viable: no need for the
-    plan's documented degraded fallback (always allow quit, rely solely
-    on reload-on-launch).
+    The previous unit tests (TestCheckUnsavedScratchOnQuit, below in the
+    test file) all passed because they mock window with MagicMock(),
+    which returns a plain MagicMock() from evaluate_js() instantly —
+    never exercising the real AppHelper.callAfter + Semaphore mechanism
+    that deadlocks on a real cocoa window. Mocking hid the bug; the
+    "verified live" claim in the original docstring version referred to
+    this same mocked unit test, not a real end-to-end quit.
+
+    FIX (first bug, 2026-10-15): never call evaluate_js from this handler.
+    Instead, api carries a plain Python boolean (api._has_unsaved_scratch,
+    pushed proactively from JS via Api.set_has_unsaved_scratch() whenever
+    scratch-tab state changes — see js/scratch.js's
+    pushUnsavedScratchState()). Reading a plain attribute requires no
+    cross-thread call into the JS engine at all, so there is nothing to
+    deadlock on there.
+
+    SECOND BUG (found the SAME day, same user report recurring after the
+    first fix shipped): this handler used to call
+    window.create_confirmation_dialog(...) when has_unsaved was True, to
+    ask the user "quit anyway?". create_confirmation_dialog has the
+    IDENTICAL AppHelper.callAfter + Semaphore(0).acquire() pattern as
+    evaluate_js (see venv/.../webview/platforms/cocoa.py's module-level
+    create_confirmation_dialog function) — calling it from the main
+    thread, which is exactly where this handler always runs
+    (window.events.closing's should_lock=True, confirmed via a SECOND
+    spindump showing the identical deadlock shape one call later:
+    -[NSApplication terminate:] -> ... ->
+    -[NSApplication _docController:shouldTerminate:] -> ffi_closure ->
+    Python -> PyThread_acquire_lock_timed), is the exact same
+    self-deadlock as the first bug, just one line further down in this
+    same function. The confirmation dialog is NOT just conditionally
+    risky — ANY attempt to show a blocking native dialog from this
+    synchronous main-thread AppKit callback chain deadlocks on cocoa, with
+    no safe async variant available anywhere in pywebview's API (checked:
+    window.py's create_confirmation_dialog wrapper has no callback/async
+    parameter, and no backend offers one).
+
+    FIX (second bug): never show ANY dialog from this handler. Always
+    allow the quit (return None unconditionally). The ACTUAL data-loss
+    protection for scratch notes is reload-on-launch (reloadScratchFiles
+    in js/scratch.js, Phase C of the original scratch-file plan) — a
+    scratch tab's content is autosaved to disk on every keystroke (see
+    js/fileio.js's saveToFile, called from editor.js's commit handlers),
+    so there is no byte-level data loss risk from skipping the
+    confirmation; the dialog's only purpose was reminding the user a
+    scratch note exists (it has no folder/location of its own), and
+    reload-on-launch already covers that by surfacing it again on next
+    startup regardless.
 
     Returning False from a closing handler cancels the close
     (should_cancel=True in cocoa.py's should_close); returning anything
-    else (including None) allows it.
-
-    Extracted to module level (rather than a main()-local closure, like
-    the sibling inject_welcome/inject_settings callbacks) specifically so
-    it is directly unit-testable with a mocked window — see
-    tests/python/test_scratch_files.py::TestCheckUnsavedScratchOnQuit.
+    else (including None) allows it. This function now always returns
+    None (never blocks the quit) — see the second-bug FIX note above for
+    why a confirmation dialog can never safely be shown from here.
     """
-    try:
-        has_unsaved = window.evaluate_js(
-            "window.__hasUnsavedScratchTabs ? window.__hasUnsavedScratchTabs() : false"
+    # has_unsaved is read for logging/diagnostic value only now — it no
+    # longer gates a dialog. Kept so a future session can see at a
+    # glance (via logger.debug output) whether scratch content existed
+    # at quit time, without needing to show anything to the user.
+    has_unsaved = getattr(api, "_has_unsaved_scratch", True)
+    if has_unsaved:
+        logger.debug(
+            "check_unsaved_scratch_on_quit: unsaved scratch content exists at "
+            "quit time; allowing quit without a dialog (see this function's "
+            "docstring — confirmation dialogs deadlock on cocoa when shown "
+            "from this synchronous main-thread handler). Reload-on-launch "
+            "will surface it again next startup."
         )
-    except Exception as e:
-        logger.debug("check_unsaved_scratch_on_quit: evaluate_js failed, allowing quit: %s", e)
-        return None
-    if not has_unsaved:
-        return None
-    proceed = window.create_confirmation_dialog(
-        "Unsaved scratch notes",
-        "You have scratch notes that haven't been saved to a file yet. "
-        "Quit anyway? Your scratch notes will be reloaded next time you "
-        "open Inkwave.",
-    )
-    return None if proceed else False
+    return None
 
 
 def main():
@@ -1317,7 +1377,7 @@ def main():
         pass
 
     try:
-        window.events.closing += (lambda: check_unsaved_scratch_on_quit(window))
+        window.events.closing += (lambda: check_unsaved_scratch_on_quit(window, api))
     except Exception as e:
         logger.warning("Failed to register window.events.closing callback: %s", e)
 

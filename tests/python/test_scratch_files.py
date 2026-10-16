@@ -246,59 +246,118 @@ class TestForgetScratchFile:
 class TestCheckUnsavedScratchOnQuit:
     def test_allows_quit_when_no_unsaved_scratch_tabs(self):
         window = MagicMock()
-        window.evaluate_js.return_value = False
-        result = app.check_unsaved_scratch_on_quit(window)
+        api = MagicMock()
+        api._has_unsaved_scratch = False
+        result = app.check_unsaved_scratch_on_quit(window, api)
         assert result is None
         window.create_confirmation_dialog.assert_not_called()
 
-    def test_allows_quit_when_hasUnsavedScratchTabs_undefined_in_js(self):
-        # window.__hasUnsavedScratchTabs doesn't exist yet (e.g. page still
-        # on the welcome screen before js/scratch.js has run) -> the
-        # evaluate_js ternary itself returns false, same as the "no
-        # unsaved tabs" case. Must not crash or treat as "has unsaved".
+    def test_fails_toward_true_internally_when_has_unsaved_scratch_attribute_missing(self):
+        # Defensive fail-safe check: if api somehow lacks the attribute
+        # entirely (shouldn't happen given Api.__init__ always sets it,
+        # but worth proving explicitly), getattr(api, "_has_unsaved_scratch",
+        # True) must default to True. As of the SECOND bug fix (removing
+        # the confirmation dialog entirely, 2026-10-15), this no longer
+        # changes the return value (always None either way) — it only
+        # changes whether the diagnostic logger.debug line fires. The
+        # observable contract this test can actually assert is simply
+        # that the function still returns None and never raises when the
+        # attribute is missing.
         window = MagicMock()
-        window.evaluate_js.return_value = False
-        result = app.check_unsaved_scratch_on_quit(window)
+        api = MagicMock(spec=[])  # no attributes at all, including _has_unsaved_scratch
+        result = app.check_unsaved_scratch_on_quit(window, api)
         assert result is None
 
-    def test_prompts_and_blocks_quit_when_unsaved_and_user_cancels(self):
+    def test_allows_quit_even_when_unsaved_scratch_exists(self):
+        # SECOND BUG FIX (2026-10-15, same day as the first, same user
+        # report recurring): this handler used to call
+        # window.create_confirmation_dialog(...) when has_unsaved was
+        # True. create_confirmation_dialog has the IDENTICAL
+        # AppHelper.callAfter + Semaphore(0).acquire() deadlock pattern as
+        # evaluate_js (see this function's docstring for the full
+        # spindump-confirmed mechanism — a SECOND spindump, from the SAME
+        # VM/machine, same day, after the FIRST fix had already shipped).
+        # The fix: never show a dialog from this handler at all. It must
+        # now return None (allow quit) regardless of has_unsaved, and
+        # must NEVER call create_confirmation_dialog.
         window = MagicMock()
-        window.evaluate_js.return_value = True
-        window.create_confirmation_dialog.return_value = False  # user clicked Cancel
-        result = app.check_unsaved_scratch_on_quit(window)
-        assert result is False
-        window.create_confirmation_dialog.assert_called_once()
-
-    def test_prompts_and_allows_quit_when_unsaved_and_user_confirms(self):
-        window = MagicMock()
-        window.evaluate_js.return_value = True
-        window.create_confirmation_dialog.return_value = True  # user clicked Quit Anyway
-        result = app.check_unsaved_scratch_on_quit(window)
-        assert result is None
-
-    def test_evaluate_js_exception_allows_quit_without_crashing(self):
-        # If the page is torn down mid-close, evaluate_js can raise.
-        # Must fail open (allow quit) rather than wedge the app shut.
-        window = MagicMock()
-        window.evaluate_js.side_effect = RuntimeError("window destroyed")
-        result = app.check_unsaved_scratch_on_quit(window)
+        api = MagicMock()
+        api._has_unsaved_scratch = True
+        result = app.check_unsaved_scratch_on_quit(window, api)
         assert result is None
         window.create_confirmation_dialog.assert_not_called()
 
-    def test_calls_evaluate_js_with_the_exact_contract_script(self):
+    def test_never_calls_evaluate_js_regression_guard(self):
+        # THE FIRST bug fix (2026-10-15, reported as "hangs on exit"): the
+        # original implementation called window.evaluate_js(...)
+        # synchronously from this handler, which deadlocks on the real
+        # cocoa backend (see this function's own docstring for the full
+        # spindump-confirmed mechanism). The previous version of this
+        # test file never caught it because MagicMock().evaluate_js(...)
+        # returns instantly with zero blocking — mocking hid the exact
+        # mechanism that deadlocks. This test can't reproduce the
+        # deadlock itself (that requires a real cocoa window + real run
+        # loop), but it DOES assert the only thing a unit test safely
+        # can: that evaluate_js is never called at all, which is the
+        # actual fix (removing the call, not changing its arguments).
         window = MagicMock()
-        window.evaluate_js.return_value = False
-        app.check_unsaved_scratch_on_quit(window)
-        called_script = window.evaluate_js.call_args[0][0]
-        assert "window.__hasUnsavedScratchTabs" in called_script
+        api = MagicMock()
+        api._has_unsaved_scratch = False
+        app.check_unsaved_scratch_on_quit(window, api)
+        window.evaluate_js.assert_not_called()
 
-    def test_confirmation_dialog_message_mentions_reload_on_next_launch(self):
-        # Reload-on-launch (Phase C) is the actual data-loss safety net;
-        # the dialog copy must tell the user that so "Quit Anyway" doesn't
-        # read as "and lose your notes".
+        api._has_unsaved_scratch = True
+        app.check_unsaved_scratch_on_quit(window, api)
+        window.evaluate_js.assert_not_called()
+
+    def test_never_calls_create_confirmation_dialog_regression_guard(self):
+        # Mirrors test_never_calls_evaluate_js_regression_guard above,
+        # but for the SECOND deadlocking call this handler used to make.
+        # Covers both the has_unsaved=True and False branches so a future
+        # regression that reintroduces the dialog ONLY in the True branch
+        # (the actual original bug) is still caught.
         window = MagicMock()
-        window.evaluate_js.return_value = True
-        window.create_confirmation_dialog.return_value = True
-        app.check_unsaved_scratch_on_quit(window)
-        message = window.create_confirmation_dialog.call_args[0][1]
-        assert "reload" in message.lower()
+        api = MagicMock()
+        api._has_unsaved_scratch = False
+        app.check_unsaved_scratch_on_quit(window, api)
+        window.create_confirmation_dialog.assert_not_called()
+
+        api._has_unsaved_scratch = True
+        app.check_unsaved_scratch_on_quit(window, api)
+        window.create_confirmation_dialog.assert_not_called()
+
+
+class TestSetHasUnsavedScratch:
+    """Api.set_has_unsaved_scratch — the receiving end of the push-based
+    fix. See check_unsaved_scratch_on_quit's docstring for the full
+    mechanism this replaces."""
+
+    def test_defaults_to_true_before_any_push(self):
+        api = app.Api(MagicMock())
+        assert api._has_unsaved_scratch is True
+
+    def test_set_true(self):
+        api = app.Api(MagicMock())
+        api.set_has_unsaved_scratch(True)
+        assert api._has_unsaved_scratch is True
+
+    def test_set_false(self):
+        api = app.Api(MagicMock())
+        api.set_has_unsaved_scratch(False)
+        assert api._has_unsaved_scratch is False
+
+    def test_coerces_truthy_falsy_js_values_to_bool(self):
+        # JS booleans cross the pywebview bridge as Python bool already
+        # in the normal case, but this guards against any future caller
+        # passing something else (e.g. 0/1, None).
+        api = app.Api(MagicMock())
+        api.set_has_unsaved_scratch(1)
+        assert api._has_unsaved_scratch is True
+        api.set_has_unsaved_scratch(0)
+        assert api._has_unsaved_scratch is False
+        api.set_has_unsaved_scratch(None)
+        assert api._has_unsaved_scratch is False
+
+    def test_returns_none(self):
+        api = app.Api(MagicMock())
+        assert api.set_has_unsaved_scratch(True) is None

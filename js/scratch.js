@@ -39,6 +39,7 @@ export function createScratchTab() {
       });
       tab._isScratch = true;
       focusFirstEmptyBlock(tab);
+      pushUnsavedScratchState();
       return tab;
     })
     .catch((err) => {
@@ -109,26 +110,64 @@ function isScratchTabEmpty(tab) {
 // left alone on close (U2's whole point is that they survive and
 // reappear on next launch).
 registerBeforeCloseTab((tab) => {
-  if (!tab || !tab._isScratch || !isScratchTabEmpty(tab)) return;
-  forgetScratchTab(tab.path);
-  const a = getApi();
-  if (a && typeof a.delete_file === "function") {
-    a.delete_file(tab.path).catch(() => {});
+  if (tab && tab._isScratch && isScratchTabEmpty(tab)) {
+    forgetScratchTab(tab.path);
+    const a = getApi();
+    if (a && typeof a.delete_file === "function") {
+      a.delete_file(tab.path).catch(() => {});
+    }
   }
+  // This hook fires BEFORE tabs.splice() removes `tab` (see
+  // js/tabs.js::closeTab), so window.__hasUnsavedScratchTabs() would
+  // still count the tab about to close. Compute the post-close state
+  // explicitly instead of relying on the (still stale) `tabs` array.
+  const a2 = getApi();
+  if (!a2 || typeof a2.set_has_unsaved_scratch !== "function") return;
+  const stillUnsaved = tabs.some(
+    (t) => t !== tab && t._isScratch && !isScratchTabEmpty(t)
+  );
+  a2.set_has_unsaved_scratch(stillUnsaved).catch(() => {});
 });
 
 /**
- * window.events.closing (app.py::check_unsaved_scratch_on_quit) calls
- * this synchronously via evaluate_js to decide whether to show the
- * quit-time confirmation. "Unsaved" here means a scratch tab with real
- * content — Inkwave autosaves on every edit (see saveToFile call sites
- * in editor.js), so there's no data-loss risk from the bytes' point of
- * view; the risk this guards against is the USER forgetting a scratch
- * note exists, since it has no folder/location of its own. Must return
- * a plain boolean (not a Promise) — evaluate_js on the Python side
- * reads this synchronously, see app.py's check_unsaved_scratch_on_quit
- * docstring for the verified mechanism.
+ * Pure boolean computation of "does any scratch tab currently have real,
+ * typed content." Exposed on window for existing E2E/unit test contracts
+ * (tests/js/scratch.test.js, tests/e2e/scratch-files.spec.js) and reused
+ * internally by pushUnsavedScratchState() below.
  */
 window.__hasUnsavedScratchTabs = function () {
   return tabs.some((t) => t._isScratch && !isScratchTabEmpty(t));
 };
+
+/**
+ * Push the current "has unsaved scratch" state to the Python Api instance
+ * so app.py's check_unsaved_scratch_on_quit (window.events.closing
+ * handler) can read it as a plain attribute instead of calling back into
+ * JS via evaluate_js.
+ *
+ * HISTORY (bug fix, 2026-10-15): the original design had Python call
+ * window.evaluate_js("window.__hasUnsavedScratchTabs()") synchronously
+ * from the closing handler. On the cocoa (macOS) backend this is a
+ * GUARANTEED DEADLOCK: window.events.closing fires on the main thread,
+ * and cocoa's evaluate_js schedules the actual JS execution via
+ * AppHelper.callAfter (runs on a FUTURE main-thread run-loop iteration)
+ * then blocks the calling thread on a semaphore — but the calling thread
+ * IS the main thread, so it can never process the callAfter block that
+ * would unblock it. Confirmed via a real spindump of the hang (main
+ * thread: -[NSWindow __close] -> ... -> PyThread_acquire_lock_timed;
+ * every other thread idle). The fix is this push-based design: JS
+ * proactively tells Python the current state whenever it changes, so
+ * Python never needs to ask JS anything at close time. See
+ * app.py::check_unsaved_scratch_on_quit's docstring for the full
+ * mechanism and app.py::Api.set_has_unsaved_scratch for the receiving end.
+ *
+ * Called from every place scratch-tab existence/content state can
+ * change: tab creation (createScratchTab), tab close
+ * (registerBeforeCloseTab, below), and every autosave of a scratch tab
+ * (js/fileio.js's saveToFile, which calls this for scratch tabs only).
+ */
+export function pushUnsavedScratchState() {
+  const a = getApi();
+  if (!a || typeof a.set_has_unsaved_scratch !== "function") return;
+  a.set_has_unsaved_scratch(window.__hasUnsavedScratchTabs()).catch(() => {});
+}

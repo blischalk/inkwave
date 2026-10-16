@@ -19,7 +19,7 @@ const indexHtml = readFileSync(indexHtmlPath, "utf8");
 const bodyMatch = indexHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
 document.body.innerHTML = bodyMatch ? bodyMatch[1] : "";
 
-const { pushUndo, undoTab, redoTab, saveOrSaveAs } = await import("../../js/fileio.js");
+const { pushUndo, undoTab, redoTab, saveOrSaveAs, saveToFile } = await import("../../js/fileio.js");
 const { setActiveTabId } = await import("../../js/state.js");
 const { getActiveTab, addTab } = await import("../../js/tabs.js");
 
@@ -34,6 +34,7 @@ function installMockApi(overrides = {}) {
       save_as: vi.fn().mockResolvedValue({ path: "/notes/renamed.md" }),
       forget_scratch_file: vi.fn().mockResolvedValue({ ok: true }),
       delete_file: vi.fn().mockResolvedValue({ ok: true }),
+      set_has_unsaved_scratch: vi.fn().mockResolvedValue(null),
       ...overrides,
     },
   };
@@ -298,5 +299,88 @@ describe("saveOrSaveAs", () => {
     saveOrSaveAs(tab);
     await new Promise((r) => setTimeout(r, 0));
     expect(tab.id).toBe(originalId);
+  });
+});
+
+// ── saveToFile ────────────────────────────────────────────────────────────────
+// Regression coverage added 2026-10-15 alongside the "hangs on exit" fix:
+// saveToFile() now calls pushUnsavedScratchState() (js/scratch.js) for
+// scratch tabs, pushing state to the Python Api instance so
+// check_unsaved_scratch_on_quit (app.py) never needs to call back into JS
+// via evaluate_js at window-close time — the exact call that deadlocked
+// on the real cocoa backend (see app.py's docstring for the full
+// mechanism). This file was never direct-tested before this addition.
+
+describe("saveToFile", () => {
+  beforeEach(() => {
+    window.pywebview = undefined;
+  });
+
+  it("does nothing when tab is null/undefined", () => {
+    expect(() => saveToFile(null)).not.toThrow();
+  });
+
+  it("does nothing when tab has no path", () => {
+    const tab = addTab({ path: null, title: "Untitled.md", content: "x" });
+    expect(() => saveToFile(tab)).not.toThrow();
+  });
+
+  it("shows no crash and skips write when API is unavailable", () => {
+    const tab = addTab({ path: "/notes/x.md", title: "x.md", content: "hi" });
+    expect(() => saveToFile(tab)).not.toThrow();
+  });
+
+  it("calls write_file with the tab's path and content", async () => {
+    const writeFn = vi.fn().mockResolvedValue({});
+    installMockApi({ write_file: writeFn });
+    const tab = addTab({ path: "/notes/x.md", title: "x.md", content: "hello world" });
+    saveToFile(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writeFn).toHaveBeenCalledWith("/notes/x.md", "hello world");
+  });
+
+  it("pushes unsaved-scratch state for a scratch tab (the actual bug-fix call site)", async () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    const tab = addTab({ path: "/drafts/Untitled.md", title: "Untitled.md", content: "a note" });
+    tab._isScratch = true;
+    saveToFile(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pushFn).toHaveBeenCalledWith(true); // non-empty scratch content -> true
+  });
+
+  it("pushes false for a scratch tab that has been emptied back out", async () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    const tab = addTab({ path: "/drafts/Untitled.md", title: "Untitled.md", content: "" });
+    tab._isScratch = true;
+    saveToFile(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pushFn).toHaveBeenCalledWith(false);
+  });
+
+  it("does NOT push unsaved-scratch state for a non-scratch (regular file) save", async () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    const tab = addTab({ path: "/notes/regular.md", title: "regular.md", content: "normal file" });
+    // tab._isScratch is left undefined/false (regular file)
+    saveToFile(tab);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(pushFn).not.toHaveBeenCalled();
+  });
+
+  it("the push call never throws and never blocks even if set_has_unsaved_scratch rejects", async () => {
+    installMockApi({
+      set_has_unsaved_scratch: vi.fn().mockRejectedValue(new Error("bridge down")),
+    });
+    const tab = addTab({ path: "/drafts/Untitled.md", title: "Untitled.md", content: "note" });
+    tab._isScratch = true;
+    expect(() => saveToFile(tab)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+    // No assertion needed beyond "did not throw" — this proves the
+    // .catch(() => {}) in pushUnsavedScratchState() actually swallows a
+    // rejected bridge call rather than propagating an unhandled rejection
+    // that could otherwise interrupt the real file save happening in
+    // the same function.
   });
 });

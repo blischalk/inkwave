@@ -116,9 +116,18 @@ if (themePickerList) {
 
 // ── Focus mode ────────────────────────────────────────────────────────────────
 export function setFocusMode(on) {
+  // Boyscout fix (found during unrelated code review, 2026-10-15):
+  // toggle_fullscreen() is a stateless toggle, not a set-to-value call.
+  // Calling it unconditionally meant calling setFocusMode(true) while
+  // already in focus mode (e.g. a double-click of the focus button, or
+  // any future caller that doesn't itself track state) would flip
+  // fullscreen OFF while the DOM attribute still said "true" — a real
+  // state desync. Must read the CURRENT state before overwriting the
+  // attribute, then only toggle when the requested state actually differs.
+  const current = isFocusMode();
   document.body.setAttribute("data-focus-mode", on ? "true" : "false");
   const a = getApi();
-  if (a && typeof a.toggle_fullscreen === "function") {
+  if (a && typeof a.toggle_fullscreen === "function" && on !== current) {
     a.toggle_fullscreen();
   }
 }
@@ -459,11 +468,19 @@ document.addEventListener("mouseup", () => {
 });
 
 // ── New file button ───────────────────────────────────────────────────────────
-if (newFileBtn) newFileBtn.disabled = true;
-newFileBtn.addEventListener("click", () => {
-  if (!treeRoot || newFileBtn.disabled) return;
-  createInFolder(treeRoot);
-});
+// Boyscout fix (found during unrelated code review, 2026-10-15): the null
+// guard on the line below only covered .disabled, not .addEventListener —
+// if newFileBtn were ever absent from the DOM, this threw and aborted all
+// subsequent listener registration in this module (context menu, keyboard
+// shortcuts, drag-and-drop). Currently latent (the button always exists in
+// index.html today) but a real crash risk for any future HTML change.
+if (newFileBtn) {
+  newFileBtn.disabled = true;
+  newFileBtn.addEventListener("click", () => {
+    if (!treeRoot || newFileBtn.disabled) return;
+    createInFolder(treeRoot);
+  });
+}
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 let contextMenuFolderPath = null;
@@ -555,6 +572,22 @@ if (modeEditBtn)
   });
 
 // ── Raw mode toggle ───────────────────────────────────────────────────────────
+const editorModeLabel = document.getElementById("editorModeLabel");
+
+// Single place that keeps every mode-affordance element in sync whenever the
+// mode actually changes. Called from the one real toggle path (rawModeBtn's
+// click handler below) and from the status-bar label's own click handler,
+// which delegates to that same path rather than re-deriving the toggle logic.
+function syncEditorModeAffordances(newMode) {
+  rawModeBtn.setAttribute("aria-pressed", newMode ? "true" : "false");
+  if (editorModeLabel) {
+    editorModeLabel.textContent = newMode ? "Source" : "Edit";
+    editorModeLabel.title = newMode
+      ? "Source mode — click to switch to Edit"
+      : "Edit mode — click to switch to Source";
+  }
+}
+
 if (rawModeBtn) {
   rawModeBtn.addEventListener("click", () => {
     const newMode = !rawMode;
@@ -572,8 +605,14 @@ if (rawModeBtn) {
       }
     }
     setRawMode(newMode);
-    rawModeBtn.setAttribute("aria-pressed", newMode ? "true" : "false");
+    syncEditorModeAffordances(newMode);
     if (tab && onShowTabContent) onShowTabContent(tab);
+  });
+}
+
+if (editorModeLabel) {
+  editorModeLabel.addEventListener("click", () => {
+    if (rawModeBtn) rawModeBtn.click();
   });
 }
 

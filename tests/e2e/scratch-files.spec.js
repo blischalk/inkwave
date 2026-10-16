@@ -167,8 +167,16 @@ test.describe("Cmd+N scratch-file tabs", () => {
     await page.keyboard.type("don't forget me");
     await expectDraftContains(page, "don't forget me");
 
-    // This is the exact contract app.py's check_unsaved_scratch_on_quit
-    // calls via evaluate_js at quit time (see app.py docstring).
+    // window.__hasUnsavedScratchTabs() is the pure JS computation this
+    // app's quit-time check is built on. As of the 2026-10-15 "hangs on
+    // exit" fix, app.py no longer calls this directly via evaluate_js at
+    // quit time (that synchronous cross-thread call deadlocks on the
+    // real cocoa backend — see app.py's check_unsaved_scratch_on_quit
+    // docstring). Instead, js/scratch.js's pushUnsavedScratchState()
+    // calls this SAME function and PUSHES the result to Python
+    // proactively via Api.set_has_unsaved_scratch — see the dedicated
+    // "pushUnsavedScratchState / quit-time push contract" describe
+    // block below for coverage of that push mechanism.
     const hasUnsaved = await page.evaluate(() => window.__hasUnsavedScratchTabs());
     expect(hasUnsaved).toBe(true);
   });
@@ -243,5 +251,160 @@ test.describe("Cmd+N scratch-file tabs", () => {
     // If we got here without the page.on("request") listener throwing,
     // zero outbound calls were made across the entire flow.
     await expect(page.locator(".tab")).toHaveCount(1);
+  });
+});
+
+test.describe("pushUnsavedScratchState / quit-time push contract (hangs-on-exit fix, 2026-10-15)", () => {
+  // This whole describe block exercises the FIX for the real bug the
+  // user hit: app.py used to call window.evaluate_js(...) synchronously
+  // from the window.events.closing handler to read
+  // window.__hasUnsavedScratchTabs() — a GUARANTEED DEADLOCK on the real
+  // cocoa (macOS) backend, confirmed via a spindump of the actual hang
+  // (main thread stuck in -[NSWindow __close] -> ... ->
+  // PyThread_acquire_lock_timed; every other thread idle). The fix: JS
+  // proactively PUSHES the current state to Python via a new
+  // Api.set_has_unsaved_scratch(bool) method, so Python never calls back
+  // into JS at quit time — there's nothing left to deadlock on. See
+  // app.py's check_unsaved_scratch_on_quit docstring for the full
+  // mechanism this replaced.
+  //
+  // The mock pywebview.api.set_has_unsaved_scratch (tests/e2e/fixtures/
+  // mock-pywebview.js) tracks every push into
+  // window.__inkwaveTestHasUnsavedScratchPushes so these tests can
+  // assert on the exact sequence of pushes, not just a final value.
+
+  test("creating a scratch tab pushes false (freshly created, empty content)", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    expect(pushes).toEqual([false]);
+  });
+
+  test("typing into a scratch tab pushes true on the very next autosave", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("real content now");
+    await expectDraftContains(page, "real content now");
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    // Every keystroke triggers its own saveToFile() call (same autosave
+    // granularity as every other edit in this app — see editor.js's
+    // syncContentAndAutosave), so typing N characters pushes once per
+    // character once content is non-empty, not once total. The
+    // meaningful assertions are: it starts false (creation, empty), it
+    // becomes true as soon as there's real content, and it STAYS true
+    // for the rest of typing (never flips back to false mid-type).
+    expect(pushes[0]).toBe(false);
+    expect(pushes.length).toBeGreaterThan(1);
+    expect(pushes.slice(1).every((p) => p === true)).toBe(true);
+  });
+
+  test("emptying a scratch tab back out (select-all + delete) pushes false again", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("temporary");
+    await expectDraftContains(page, "temporary");
+
+    const editable = page.locator(".md-block.editing .inline-edit");
+    await editable.evaluate((el) => {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      sel.addRange(range);
+    });
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(100); // let the autosave debounce (if any) settle
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    expect(pushes[pushes.length - 1]).toBe(false);
+  });
+
+  test("closing the only unsaved scratch tab pushes false (post-close state, not stale pre-close state)", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("will be closed");
+    await expectDraftContains(page, "will be closed");
+
+    const pushesBeforeClose = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes.length);
+    await page.locator(".tab .tab-close, .tab [class*='close']").first().click();
+    await page.waitForTimeout(100);
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    expect(pushes.length).toBeGreaterThan(pushesBeforeClose);
+    expect(pushes[pushes.length - 1]).toBe(false);
+  });
+
+  test("closing one unsaved scratch tab while another remains open pushes true (not false)", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("keep me unsaved");
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("close this one");
+
+    // expectDraftContains() only reads the FIRST entry in the drafts
+    // registry (Object.values(...)[0]) — not useful once more than one
+    // draft exists. Poll the full registry's VALUES directly instead so
+    // this works regardless of which path got which content.
+    await expect
+      .poll(async () => Object.values(await readDraftsRegistry(page)), { timeout: 10000 })
+      .toEqual(expect.arrayContaining(["keep me unsaved", "close this one"]));
+
+    await expect(page.locator(".tab")).toHaveCount(2);
+    await page.locator(".tab").last().locator(".tab-close, [class*='close']").click();
+    await page.waitForTimeout(100);
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    expect(pushes[pushes.length - 1]).toBe(true);
+  });
+
+  test("regular (non-scratch) file saves never call set_has_unsaved_scratch", async ({ page }) => {
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.evaluate(async () => {
+      const tabsMod = await import("/js/tabs.js");
+      const tab = tabsMod.addTab({ path: "/notes/real.md", title: "real.md", content: "x" });
+      const fileioMod = await import("/js/fileio.js");
+      fileioMod.saveToFile(tab);
+    });
+    await page.waitForTimeout(100);
+
+    const pushes = await page.evaluate(() => window.__inkwaveTestHasUnsavedScratchPushes);
+    expect(pushes).toBeUndefined(); // never initialized because never called
+  });
+
+  test("the pushed value always matches window.__hasUnsavedScratchTabs() at push time", async ({ page }) => {
+    // End-to-end consistency check: the push mechanism and the pure
+    // computation it wraps must never disagree, since Python's quit-time
+    // decision now depends ENTIRELY on the pushed value being accurate.
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await page.keyboard.press(CMD_N);
+    await page.waitForSelector(".md-block.editing", { timeout: 2000 });
+    await page.keyboard.type("consistency check");
+    await expectDraftContains(page, "consistency check");
+
+    const result = await page.evaluate(() => ({
+      lastPush: window.__inkwaveTestHasUnsavedScratchPushes.at(-1),
+      currentComputation: window.__hasUnsavedScratchTabs(),
+    }));
+    expect(result.lastPush).toBe(result.currentComputation);
+    expect(result.lastPush).toBe(true);
   });
 });

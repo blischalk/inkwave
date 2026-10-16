@@ -77,19 +77,44 @@ test.describe("Core block editing", () => {
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Enter");
 
-    // handleEnterInBlock() (js/editor.js) updates tab.content and the
-    // DOM in memory but does NOT call saveToFile() itself — confirmed
-    // by grepping every saveToFile call site in editor.js, none are
-    // inside handleEnterInBlock. It auto-focuses the newly-created
-    // second block into edit mode instead; THAT block's own commit()
-    // (on blur/Escape) is what actually persists the split to disk.
-    // This is real, intentional-looking app behavior (not a test bug)
-    // reflecting that the split only becomes durable once the cursor
-    // leaves the new block — so Escape here is the realistic action
-    // that actually triggers the write, not a workaround.
+    // UPDATE (2026-10-15, code review Boyscout fix): handleEnterInBlock()
+    // now DOES call saveToFile() immediately after the split (previously
+    // it only updated tab.content/DOM in memory, relying on the
+    // newly-focused second block's own commit() on blur/Escape to
+    // persist it — a real data-loss window if the app closed between
+    // Enter and Escape). The split is now durable on disk the instant
+    // Enter is pressed, in addition to the pre-existing blur/Escape path
+    // below. Escape is still exercised here because that's the realistic
+    // next user action, not because it's the only thing that saves.
     await expect(page.locator('.md-block[data-block-index="2"].editing')).toBeVisible({ timeout: 2000 });
     await page.keyboard.press("Escape");
 
+    await expect
+      .poll(() => readWrittenFile(page, DOC_PATH))
+      .toBe("# Doc\n\nFirst\n\npart");
+  });
+
+  test("pressing Enter mid-paragraph saves the split to disk immediately, BEFORE Escape (regression guard)", async ({ page }) => {
+    // Regression test for the Boyscout fix above: handleEnterInBlock()
+    // must call saveToFile() synchronously as part of handling Enter,
+    // not rely solely on the newly-focused second block's own
+    // blur/Escape commit(). Verified by checking the written file
+    // immediately after Enter, with NO Escape press at all.
+    await gotoApp(page, { initialSettings: { showWelcomeOnStartup: "false" } });
+    await page.waitForSelector(".content", { state: "attached" });
+    await openDoc(page, "# Doc\n\nFirstpart");
+    await page.locator('.md-block[data-block-index="1"]').dblclick();
+    const editable = page.locator(".md-block.editing .inline-edit");
+    await expect(editable).toBeFocused({ timeout: 2000 });
+    await page.keyboard.press("Home");
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+
+    await expect(page.locator('.md-block[data-block-index="2"].editing')).toBeVisible({ timeout: 2000 });
+    // Deliberately NO Escape press here — if the split only became
+    // durable via the second block's own blur/Escape commit(), this
+    // assertion would fail (the file would still read the pre-split
+    // content at this point).
     await expect
       .poll(() => readWrittenFile(page, DOC_PATH))
       .toBe("# Doc\n\nFirst\n\npart");

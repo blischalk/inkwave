@@ -5,7 +5,7 @@ import {
 import { getApi } from "./api.js";
 import { blocksToContent } from "./blocks.js";
 import { getTabTitle, renderTabBar } from "./tabs.js";
-import { forgetScratchTab } from "./scratch.js";
+import { forgetScratchTab, pushUnsavedScratchState } from "./scratch.js";
 import { showError } from "./utils.js";
 
 // ── Per-tab undo / redo ───────────────────────────────────────────────────────
@@ -57,6 +57,12 @@ export function saveToFile(tab) {
     .catch((err) => {
       showError((err && (err.message || err)) || "Save failed.");
     });
+  // Push updated unsaved-scratch state for the quit-time check (only
+  // scratch tabs matter — see js/scratch.js's pushUnsavedScratchState
+  // docstring). Deliberately NOT awaited/chained onto write_file's own
+  // promise: this is independent, fire-and-forget bookkeeping, and must
+  // never block or fail the actual file save.
+  if (tab._isScratch) pushUnsavedScratchState();
 }
 
 export function saveOrSaveAs(tab) {

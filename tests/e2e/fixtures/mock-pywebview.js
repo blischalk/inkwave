@@ -69,6 +69,20 @@ export function installMockPywebviewApi({ initialSettings, welcomeContent, initi
         delete window.__inkwaveTestDraftsRegistry[path];
         return Promise.resolve({ ok: true });
       },
+      // Mock for the "hangs on exit" fix (2026-10-15): js/scratch.js's
+      // pushUnsavedScratchState() calls this whenever scratch-tab unsaved
+      // state changes, so the real Python Api can read a plain attribute
+      // at quit time instead of calling window.evaluate_js (which
+      // deadlocks on the real cocoa backend — see app.py's
+      // check_unsaved_scratch_on_quit docstring). Tracks every push in
+      // an array (not just the latest value) so tests can assert on the
+      // exact sequence of pushes, not just the final state.
+      set_has_unsaved_scratch(value) {
+        window.__inkwaveTestHasUnsavedScratchPushes =
+          window.__inkwaveTestHasUnsavedScratchPushes || [];
+        window.__inkwaveTestHasUnsavedScratchPushes.push(value);
+        return Promise.resolve(null);
+      },
       write_file(path, content) {
         const override = window.__inkwaveMockApiOverrides && window.__inkwaveMockApiOverrides.write_file;
         if (override) return Promise.resolve(override(path, content));

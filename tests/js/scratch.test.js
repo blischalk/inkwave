@@ -20,7 +20,7 @@ document.body.innerHTML = bodyMatch ? bodyMatch[1] : "";
 
 const stateMod = await import("../../js/state.js");
 const { tabs: tabsRef } = stateMod;
-const { createScratchTab, forgetScratchTab, reloadScratchFiles } = await import("../../js/scratch.js");
+const { createScratchTab, forgetScratchTab, reloadScratchFiles, pushUnsavedScratchState } = await import("../../js/scratch.js");
 const { closeTab } = await import("../../js/tabs.js");
 
 function installMockApi(overrides = {}) {
@@ -30,6 +30,7 @@ function installMockApi(overrides = {}) {
       list_scratch_files: vi.fn().mockResolvedValue({ files: [] }),
       forget_scratch_file: vi.fn().mockResolvedValue({ ok: true }),
       delete_file: vi.fn().mockResolvedValue({ ok: true }),
+      set_has_unsaved_scratch: vi.fn().mockResolvedValue(null),
       ...overrides,
     },
   };
@@ -61,6 +62,13 @@ describe("createScratchTab", () => {
     installMockApi();
     const tab = await createScratchTab();
     expect(tab._isScratch).toBe(true);
+  });
+
+  it("pushes unsaved-scratch state to Python after creating the tab (fix for the 'hangs on exit' bug)", async () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    await createScratchTab();
+    expect(pushFn).toHaveBeenCalledWith(false); // freshly created, empty content -> false
   });
 
   it("shows an error and creates no tab when create_scratch_file returns an error", async () => {
@@ -170,6 +178,56 @@ describe("reloadScratchFiles", () => {
   });
 });
 
+describe("pushUnsavedScratchState (the fix for the 'hangs on exit' bug)", () => {
+  // HISTORY: app.py's check_unsaved_scratch_on_quit used to call
+  // window.evaluate_js("window.__hasUnsavedScratchTabs()") synchronously
+  // from the main thread during window close — a guaranteed deadlock on
+  // the real cocoa backend (AppHelper.callAfter needs the main thread's
+  // run loop, which is itself blocked waiting). This function is the
+  // fix: JS proactively PUSHES the current state to a plain Python
+  // attribute (Api._has_unsaved_scratch) whenever it changes, so Python
+  // never needs to ask JS anything at close time. See
+  // js/fileio.js::saveToFile and js/scratch.js's own
+  // createScratchTab/registerBeforeCloseTab call sites for where this
+  // gets invoked in practice.
+
+  it("is exported as a function", () => {
+    expect(typeof pushUnsavedScratchState).toBe("function");
+  });
+
+  it("does nothing (no crash) when API is unavailable", () => {
+    window.pywebview = undefined;
+    expect(() => pushUnsavedScratchState()).not.toThrow();
+  });
+
+  it("does nothing (no crash) when set_has_unsaved_scratch is not a function", () => {
+    installMockApi({ set_has_unsaved_scratch: undefined });
+    expect(() => pushUnsavedScratchState()).not.toThrow();
+  });
+
+  it("pushes true when a scratch tab has real content", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/drafts/x.md", path: "/drafts/x.md", content: "real content", _isScratch: true });
+    pushUnsavedScratchState();
+    expect(pushFn).toHaveBeenCalledWith(true);
+  });
+
+  it("pushes false when no scratch tabs have content", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/drafts/x.md", path: "/drafts/x.md", content: "", _isScratch: true });
+    pushUnsavedScratchState();
+    expect(pushFn).toHaveBeenCalledWith(false);
+  });
+
+  it("never throws even when set_has_unsaved_scratch rejects", async () => {
+    installMockApi({ set_has_unsaved_scratch: vi.fn().mockRejectedValue(new Error("bridge down")) });
+    expect(() => pushUnsavedScratchState()).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0)); // flush the swallowed rejection
+  });
+});
+
 describe("window.__hasUnsavedScratchTabs (quit-time contract consumed by app.py)", () => {
   it("is defined as a function on window after module load", () => {
     expect(typeof window.__hasUnsavedScratchTabs).toBe("function");
@@ -259,5 +317,51 @@ describe("U4: closing an empty scratch tab discards it (onBeforeCloseTab hook)",
     window.pywebview = undefined;
     tabsRef.push({ id: "/drafts/Untitled.md", path: "/drafts/Untitled.md", content: "", _isScratch: true });
     expect(() => closeTab("/drafts/Untitled.md")).not.toThrow();
+  });
+
+  // Regression coverage for the 2026-10-15 "hangs on exit" fix: the
+  // onBeforeCloseTab hook fires BEFORE tabs.splice() removes the closing
+  // tab (see js/tabs.js::closeTab), so a naive push would still count
+  // the about-to-close tab. The fix computes the post-close state
+  // explicitly by excluding `tab` itself, not by relying on `tabs`'s
+  // (still stale at hook time) contents.
+  it("pushes false after closing the ONLY unsaved scratch tab (post-close state, not stale pre-close state)", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/drafts/Untitled.md", path: "/drafts/Untitled.md", content: "has content", _isScratch: true });
+    closeTab("/drafts/Untitled.md");
+    expect(pushFn).toHaveBeenCalledWith(false);
+  });
+
+  it("pushes true after closing one unsaved scratch tab while another unsaved scratch tab remains open", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/drafts/a.md", path: "/drafts/a.md", content: "keep me unsaved", _isScratch: true });
+    tabsRef.push({ id: "/drafts/b.md", path: "/drafts/b.md", content: "closing this one", _isScratch: true });
+    closeTab("/drafts/b.md");
+    expect(pushFn).toHaveBeenCalledWith(true);
+  });
+
+  it("pushes false when closing an empty scratch tab that was never the unsaved one", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/drafts/empty.md", path: "/drafts/empty.md", content: "", _isScratch: true });
+    closeTab("/drafts/empty.md");
+    expect(pushFn).toHaveBeenCalledWith(false);
+  });
+
+  it("still pushes state when closing a regular (non-scratch) tab, computed over remaining scratch tabs", () => {
+    const pushFn = vi.fn().mockResolvedValue(null);
+    installMockApi({ set_has_unsaved_scratch: pushFn });
+    tabsRef.push({ id: "/notes/real.md", path: "/notes/real.md", content: "regular file", _isScratch: false });
+    tabsRef.push({ id: "/drafts/x.md", path: "/drafts/x.md", content: "unsaved scratch", _isScratch: true });
+    closeTab("/notes/real.md");
+    expect(pushFn).toHaveBeenCalledWith(true); // the scratch tab is untouched, still unsaved
+  });
+
+  it("does not throw when the API is unavailable during the post-close push", () => {
+    window.pywebview = undefined;
+    tabsRef.push({ id: "/drafts/x.md", path: "/drafts/x.md", content: "note", _isScratch: true });
+    expect(() => closeTab("/drafts/x.md")).not.toThrow();
   });
 });

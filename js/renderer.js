@@ -8,6 +8,7 @@ import {
   lastEditDismissAt,
 } from "./state.js";
 import { initBlockNav, clearBlockNav, applyVimMode, placeVimCursorAtContentOffset, scrollRawCursorIntoView } from "./vim.js";
+import { attachGutter, detachGutter } from "./raw-editor-gutter.js";
 import { escapeHtml, highlightCodeInContainer } from "./utils.js";
 import {
   blockRaw, getBlocks, blocksToContent,
@@ -101,7 +102,17 @@ export function applyScaleZoom(el) {
 }
 
 export function applyDocFontSize() {
-  document.querySelectorAll('.pane .rendered, .pane .raw-editor').forEach(applyScaleZoom);
+  // .raw-editor-wrap (gutter + textarea) is zoomed as one unit so the
+  // line-number gutter stays pixel-aligned with the scaled textarea text.
+  // Before the gutter wrapper existed, '.pane .raw-editor' (the bare
+  // textarea) was the zoom target directly; the wrapper selector must be
+  // tried first and, when present, used INSTEAD of the inner textarea —
+  // scaling both would compound the transform.
+  document.querySelectorAll('.pane .rendered').forEach(applyScaleZoom);
+  document.querySelectorAll('.pane .raw-editor-wrap').forEach(applyScaleZoom);
+  document.querySelectorAll('.pane .raw-editor').forEach((el) => {
+    if (!el.closest(".raw-editor-wrap")) applyScaleZoom(el);
+  });
 }
 
 /** Update block raw so the first image has the given width/height (px). Handles ![alt](url) and <img>. */
@@ -220,7 +231,15 @@ function wireImageResize(container, tab, blocks) {
           currentTabRef.content = tab.content;
           setCurrentBlocks(blocksCopy);
           saveToFile(tab);
-          if (onShowTabContent) onShowTabContent(tab);
+          // Boyscout fix (found during unrelated code review, 2026-10-15):
+          // `onShowTabContent` was referenced here but never imported into
+          // this module (it's a state.js live-binding other modules import
+          // to call back into this file's showTabContent — but THIS file
+          // IS the one that defines and registers showTabContent, so it
+          // should just call it directly). The bare identifier reference
+          // threw ReferenceError on every completed image resize,
+          // preventing the re-render from ever running.
+          showTabContent(tab);
         };
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
@@ -299,6 +318,12 @@ export function showTabContent(tab, preferredBlocks) {
     // ── Raw mode: show the full file as an editable textarea ─────────────────
     if (rawMode) {
       const contentStr = tab.content != null ? String(tab.content) : "";
+      // A previous raw-editor textarea (if any) is about to be discarded by
+      // the innerHTML reset below. detachGutter removes its hidden mirror
+      // element from document.body — that mirror lives outside contentEl,
+      // so wiping innerHTML alone would leak it on every raw-mode re-render.
+      const prevRawEditor = contentEl.querySelector(".raw-editor");
+      if (prevRawEditor) detachGutter(prevRawEditor);
       contentEl.className = "content raw-mode";
       contentEl.onclick = null;
       contentEl.innerHTML = "";
@@ -309,6 +334,14 @@ export function showTabContent(tab, preferredBlocks) {
       textarea.setAttribute("autocorrect", "off");
       textarea.setAttribute("autocapitalize", "none");
       contentEl.appendChild(textarea);
+      // attachGutter must run BEFORE applyDocFontSize: it wraps textarea in
+      // .raw-editor-wrap, and applyDocFontSize's zoom-scaling branches on
+      // whether that wrapper exists yet (scales the wrap as one unit so the
+      // gutter stays pixel-aligned with scaled text, instead of scaling the
+      // bare textarea alone). Reversing this order would scale the textarea
+      // once directly here, then again indirectly once wrapped — or leave
+      // the gutter unscaled against scaled text. Either way: misaligned.
+      attachGutter(textarea);
       applyDocFontSize();
       setCurrentTabRef(tab);
       setCurrentBlocks(getBlocks(contentStr));
@@ -330,6 +363,15 @@ export function showTabContent(tab, preferredBlocks) {
       textarea.focus();
       return;
     }
+
+    // Any branch below this point renders block/WYSIWYG mode. If the
+    // previously-displayed content was a raw-editor textarea (user just
+    // switched raw -> block), detach its gutter here once, before any of
+    // the innerHTML resets further down discard that textarea — otherwise
+    // the gutter's hidden mirror element (parented to document.body, not
+    // contentEl) would be orphaned.
+    const prevRawEditor2 = contentEl.querySelector(".raw-editor");
+    if (prevRawEditor2) detachGutter(prevRawEditor2);
 
     if (tab.content == null && !tab.path) {
       contentEl.className = "content";
@@ -435,6 +477,24 @@ export function showTabContent(tab, preferredBlocks) {
           return;
         // Nested list items are .md-block inside .md-block; only the innermost
         // (the one actually clicked) should start editing, not its ancestors.
+        if (e.target.closest(".md-block") !== blockEl) return;
+        const idx = parseInt(blockEl.getAttribute("data-block-index"), 10);
+        if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
+        if (onStartInlineEdit) onStartInlineEdit(blockEl, idx, currentBlocks, tab, e);
+      });
+      // An empty block has nothing to select/drag — double-click-to-edit's
+      // whole rationale ("single-click + drag can select text for copy")
+      // doesn't apply. Require only a single click so the ghost placeholder
+      // (P1) isn't a dead click target. Mutually exclusive with the dblclick
+      // listener above in practice: once typed content exists, the next
+      // render drops "md-block-empty" from this element (see renderer.js
+      // isEmpty computation), so this listener naturally stops firing for
+      // that block without needing to be removed.
+      blockEl.addEventListener("click", (e) => {
+        if (!dblClickEdit || isSearchOpen()) return;
+        if (!blockEl.classList.contains("md-block-empty")) return;
+        if (blockEl.classList.contains("editing")) return;
+        if (blockEl.classList.contains("md-block-table")) return;
         if (e.target.closest(".md-block") !== blockEl) return;
         const idx = parseInt(blockEl.getAttribute("data-block-index"), 10);
         if (isNaN(idx) || idx < 0 || idx >= currentBlocks.length) return;
