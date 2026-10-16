@@ -2,6 +2,8 @@
 settings.json
 node_modules/
 .venv/
+venv/
+.grit/
 .coverage
 coverage/
 

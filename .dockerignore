@@ -1,0 +1,12 @@
+node_modules
+venv
+.venv
+__pycache__
+.pytest_cache
+.grit
+*.pyc
+.DS_Store
+.git
+icon.iconset
+*.icns
+*.ico

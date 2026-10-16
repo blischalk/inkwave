@@ -10,6 +10,7 @@ import {
   docFontSize, setDocFontSize,
 } from "./state.js";
 import { loadSettings, saveSettings } from "./settings.js";
+import { applyDocFontSize, FONT_SIZE_DEFAULT } from "./renderer.js";
 import { getApi } from "./api.js";
 import { escapeHtml, showError } from "./utils.js";
 import { getTabTitle, addTab, renderTabBar, getActiveTab, closeTab } from "./tabs.js";
@@ -577,7 +578,10 @@ if (rawModeBtn) {
 }
 
 // ── Font size ────────────────────────────────────────────────────────────────
-const FONT_SIZE_DEFAULT = 0.95;
+// FONT_SIZE_DEFAULT is the single source of truth, defined in renderer.js
+// (where applyScaleZoom/applyDocFontSize use it for the scale calculation).
+// Importing it here, instead of redeclaring, keeps the clamp math in this
+// function and the scale math in renderer.js from silently drifting apart.
 const FONT_SIZE_MIN = 0.6;
 const FONT_SIZE_MAX = 2.0;
 const FONT_SIZE_STEP = 0.05;
@@ -587,10 +591,7 @@ function changeFontSize(delta) {
     ? FONT_SIZE_DEFAULT
     : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round((docFontSize + delta) * 100) / 100));
   setDocFontSize(next);
-  const rendered = contentEl.querySelector(".rendered");
-  if (rendered) rendered.style.fontSize = next + "rem";
-  const raw = contentEl.querySelector(".raw-editor");
-  if (raw) raw.style.fontSize = next + "rem";
+  applyDocFontSize();
   const s = loadSettings();
   s.docFontSize = next;
   saveSettings(s);

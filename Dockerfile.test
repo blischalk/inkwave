@@ -1,0 +1,54 @@
+# Headless test runner for inkwave — runs the full JS (vitest) and Python
+# (pytest + pywebview/WebKitGTK) suites with zero on-screen windows.
+#
+# pywebview on Linux requires GTK3 + WebKit2GTK and a display server even
+# in "hidden" mode (see tests/python/test_gui.py::run_gui_test). xvfb-run
+# provides a virtual framebuffer so no window ever appears, in Docker or
+# on the host.
+#
+# Build: docker build -t inkwave-tests -f Dockerfile.test .
+# Run:   docker run --rm inkwave-tests
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.12 \
+        python3.12-venv \
+        python3-pip \
+        python3-gi \
+        python3-gi-cairo \
+        gir1.2-gtk-3.0 \
+        gir1.2-webkit2-4.1 \
+        libgtk-3-0 \
+        libwebkit2gtk-4.1-0 \
+        xvfb \
+        curl \
+        ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# JS deps first (cached layer unless package*.json changes)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Python deps — Linux pywebview backend uses system python3-gi (PyGObject),
+# NOT pyobjc (macOS-only, see requirements.txt comment). Only pywebview
+# itself + pure-Python app deps are installed via pip; GTK bindings come
+# from apt above and are exposed to the venv via --system-site-packages.
+RUN python3.12 -m venv --system-site-packages /app/venv
+ENV PATH="/app/venv/bin:${PATH}"
+COPY requirements-dev.txt ./
+RUN pip install --no-cache-dir pywebview pytest pytest-timeout markdown-it-py mdit-py-plugins Pygments reportlab svglib
+
+COPY . .
+
+CMD ["bash", "-c", "set -e; \
+    echo '=== vitest (JS) ===' && npx vitest run; \
+    echo '=== pytest (Python/pywebview, headless via Xvfb) ===' && \
+    xvfb-run -a --server-args='-screen 0 1280x1024x24' \
+        python3.12 -m pytest tests/python/ -v"]
